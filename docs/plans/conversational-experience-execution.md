@@ -59,3 +59,11 @@ Phase4 commit: `c6b6bae`.
 Added accessible disabled states, polite voice phase/error feedback, wrapping voice controls with retained touch targets, and an explicit transient non-mixing playback audio mode shared with capture configuration. Independent GPT-6.1 Sol/xhigh source review cleared the initial candidate with no actionable findings. Main's complete host run includes these changes; the implementor also passed74 focused checks and types. Tests exercise real adapter acquisition, cancellation during mode setup and mode failure cleanup.
 
 The installed SDK player requests focus and may resume after a transient interruption; its recorder does not itself request audio focus. No capture-interruption safety or rendered large-text/TalkBack behavior is claimed from these checks. The [owner acceptance matrix](conversational-phase5-acceptance.md) records device, call, routing, draft, reconnect and task checks still required. No new background microphone/service or theme system was introduced.
+
+Phase5 commit: `0e4921e`.
+
+## Phase 6 — built owner-test preview; acceptance open
+
+Version 0.3.2/build9 is packaged with the retained signing certificate. Main passed the final 386-check host aggregate, workspace strict types, contract drift and whitespace checks. Final incremental Android release build passed; 146 app/package source hashes stayed unchanged across packaging. APK identity, manifest, font, bundle and exact deployment-token scans pass. See [release evidence and remaining acceptance](../releases/0.3.2.md). The preview has not been installed or exercised on the phone, and no real inference, task execution or performance benchmark was run. No account/plan, Hermes/Home Dashboard configuration, signing migration or paid fallback change was made.
+
+Independent GPT-6.1 Sol/xhigh release outcome review cleared this frozen version/documentation/evidence packet after clarifying that fixture creation/archival were mutations of an owned empty session, distinct from its read-only queries. No actionable findings remain in the reviewed preview scope. The full roadmap is not accepted as complete: native voice is deferred and owner hardware/performance acceptance is outstanding. Token totals for main and children are unavailable from this runtime; no billed total is inferred.

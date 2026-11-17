@@ -1,7 +1,16 @@
 # Changelog
 
-User-facing history recorded 17 November 2026. Version numbers identify the app, not the root
+User-facing history updated 18 November 2026. Version numbers identify the app, not the root
 npm workspace. Artifact identity and acceptance are in [release records](docs/releases/README.md).
+
+## 0.3.2 (9) - 18 November 2026 preview candidate
+
+- Optional bounded conversation timings and offline baseline/candidate summaries.
+- Fast/Balanced/Deep per-session presets on enabled existing OpenAI-Codex routes, with advanced settings retained.
+- Shared speech ownership, Speak replies, exactly correlated typed readback and safe Type instead draft handoff.
+- Observed background-task tray, child transcript reads, specific stop requests and deduplicated terminal notifications.
+- Accessible disabled/voice status announcements, wrapping playback actions and explicit transient playback audio focus.
+- Native duplex voice remains deferred behind canonical-history and included-credit hard-stop gates. No latency improvement or phone acceptance is claimed.
 
 ## 0.3.1 (8) - 17 November 2026
 

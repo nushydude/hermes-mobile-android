@@ -20,6 +20,7 @@ gateway tests and owner phone acceptance are different kinds of evidence and are
 | [0009](0009-android-incoming-shares.md) | Reviewable Android sharing and durable drafts | 2026-11-17 | Accepted |
 | [0010](0010-android-packaging-and-signing.md) | Android packaging, compatibility and current signing lineage | 2026-11-17 | Accepted |
 | [0011](0011-public-source-distribution.md) | Public reusable source and private deployment boundaries | 2026-11-17 | Accepted |
+| [0012](0012-shared-conversation-controls-and-observed-tasks.md) | Shared controls, speech ownership and observed task boundaries | 2026-11-18 | Accepted for preview |
 
 Use [the template](template.md) for future decisions. Do not rewrite a historical record to make
 an old decision appear current: add a new record that names the superseded one and update this

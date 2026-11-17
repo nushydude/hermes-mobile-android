@@ -1,6 +1,8 @@
 # Documentation map
 
-Updated 17 November 2026 (Australia/Sydney). Last recorded installation: **0.3.1 (8)**.
+Updated 18 November 2026 (Australia/Sydney). Last recorded installation: **0.3.1 (8)**.
+
+Prepared preview: [0.3.2 (9)](releases/0.3.2.md), not installed. [Conversational execution and gates](plans/conversational-experience-execution.md).
 
 ## Read first
 

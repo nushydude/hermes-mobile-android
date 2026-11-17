@@ -1,8 +1,8 @@
 # Hermes Android conversational experience: architecture and implementation proposal
 
 **Date:** 17 November 2026, Australia/Sydney  
-**Status:** Implementation authorized in the subsequent conversation; first Phase 0 diagnostic candidate implemented, independently reviewed and repaired. Baseline commit/progression authorized on 18 November 2026; see [execution record](docs/plans/conversational-experience-execution.md). Original research and future-phase conditions below remain applicable.  
-**Scope:** Planning only. Preserve ongoing audit repairs, existing shared Hermes sessions, memory, tools, skills, desktop handoff and operator approval boundaries.  
+**Status:** Subsequent owner authorization implemented the safe preview scope through Phases 0, 1, 2, 4 and 5 with independent review/remediation. Phase 3 is evaluated and deferred. Phase 6 has a built 0.3.2 (9) candidate and host/package evidence; owner device/performance acceptance remains open. See the [execution record](docs/plans/conversational-experience-execution.md) and [release](docs/releases/0.3.2.md). Original research and conditional future gates below remain applicable.
+**Original investigation scope:** Planning only. Preserve ongoing audit repairs, existing shared Hermes sessions, memory, tools, skills, desktop handoff and operator approval boundaries.
 **Baseline:** Mobile HEAD `8d509633857594d82431528d374cf0cfae645c97` **plus a moving, extensively modified working tree**; installed Hermes source `ea1d78596e7ddd51daf228311cb37e033fd2686c`. See the [evidence inventory](docs/plans/2026-11-17-conversational-experience-evidence.md) for exact sources, versions, source/runtime distinctions and investigation limits.
 
 This is an investigation and reviewable proposal, not a replacement for the governing [PLAN](PLAN.md), an accepted ADR, or approval to begin its implementation. The task explicitly authorizes saving planning documents before implementation review. No application source, runtime configuration, dependencies, existing documentation or live session was changed for this investigation. No new inference, audio job, live benchmark or background agent was run.

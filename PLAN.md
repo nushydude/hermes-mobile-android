@@ -641,3 +641,10 @@ Require focused regression tests, applicable offline/type/contract checks, indep
 GPT-6.1 Sol review at extra-high effort, remediation of review findings, and a verified final APK.
 Target version 0.3.1/build 8. Building does not authorize installation or phone behavior tests.
 Gateway restart, credential/configuration, Tailscale and messaging rules remain unchanged.
+
+
+## Owner-authorized conversational follow-up — 18 November 2026
+
+The owner authorized implementing the conversational proposal, committing the reviewed 0.3.1 baseline separately, and proceeding after independent GPT-6.1 Sol / Extra High review and remediation per phase. Stop only for consequential configuration changes or real blockers. This supersedes earlier planning-only implementation gates, while preserving existing runtime, phone-installation, inference/resource and secret-handling boundaries.
+
+The 0.3.2 (9) owner-test preview implements timing diagnostics, per-session presets, shared speech controls and draft handoff, observed task visibility and accessible foreground audio controls. Native duplex voice is evaluated and deferred because canonical external-turn commit and included-credit hard stops are unavailable. No new plans, paid credit purchases, provider inference or Home Dashboard/Hermes configuration changes were made. The [execution record](docs/plans/conversational-experience-execution.md) records reviews and fixes; the [release record](docs/releases/0.3.2.md) separates host/build evidence from open device/performance acceptance. No phone installation is authorized by producing this preview.

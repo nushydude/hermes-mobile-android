@@ -105,3 +105,7 @@ The optional remoteMessaging service helps connectivity but is not a delivery gu
 The PC/ntfy tier is independent and best-effort. It uses generic messages/session links, not reply
 previews, and has filtering/deduplication/worker limitations. The two tiers may overlap. See
 [notification operations](../NOTIFICATIONS.md) and [acceptance](verification.md).
+
+## Conversational preview extension (18 November 2026)
+
+The 0.3.2 preview adds per-session presets, a shared foreground speech lease and bounded observed-task state. The optional `hermes-tasks.db` cache is separate from drafts/outbox and can fail into memory. Child transcripts stay parent-scoped; stopping speech, stopping a child and stopping the parent remain separate operations. See [ADR 0012](adr/0012-shared-conversation-controls-and-observed-tasks.md) and the [release's acceptance limits](releases/0.3.2.md). Native duplex voice and paid API fallback are not enabled.

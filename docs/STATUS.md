@@ -1,6 +1,10 @@
 # Current implementation and acceptance
 
-Recorded 17 November 2026. This is a documentation snapshot, not a live service-health check.
+Recorded 18 November 2026. This is a documentation snapshot, not a live service-health check.
+
+## New preview candidate
+
+[0.3.2 (9)](releases/0.3.2.md) is built and not installed. Reviewed conversational controls, timing diagnostics and observed-task visibility are implemented. Main's 386 offline checks, types, contract drift, native build and APK integrity checks pass. Device, real-child and performance acceptance remain open; native duplex voice is deferred behind continuity and included-credit hard-stop gates. No Hermes/Home Dashboard configuration or account/plan changes were made. See the [execution record](plans/conversational-experience-execution.md) and [owner checklist](plans/conversational-phase5-acceptance.md).
 
 ## Release
 
