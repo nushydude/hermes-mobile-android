@@ -11,6 +11,11 @@ export function eventKey(origin: string, event: any): string | null {
   if (!origin || !event.session_id || !event.replay_epoch || !Number.isSafeInteger(event.seq)) return null;
   return JSON.stringify([origin,event.session_id,event.replay_epoch,event.seq]);
 }
+export function taskTerminalKey(origin: string, event: any): string | null {
+  const id = event?.payload?.subagent_id, status = event?.payload?.status;
+  if (!origin || event?.type !== 'subagent.complete' || typeof event.session_id !== 'string' || !event.session_id || typeof id !== 'string' || !id || id.length > 512 || !['completed','failed','error','timeout','interrupted'].includes(status)) return null;
+  return JSON.stringify(['task', origin, event.session_id, id]);
+}
 export function safeChoices(choices: unknown): ('once'|'deny')[] {
   if (!Array.isArray(choices)) return [];
   const values = choices.map(c => typeof c === 'string' ? c : c && typeof c === 'object' ? (c.value ?? c.id ?? c.label) : null);

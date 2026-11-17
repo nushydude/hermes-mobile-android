@@ -46,6 +46,9 @@ import { speechParts, speechText } from '../components/voiceText';
 import { TypedSpeechWatcher } from '../components/typedSpeechWatcher';
 import { conversationDiagnostics } from '../state/conversationDiagnostics';
 import { VoiceSheet } from "../components/VoiceSheet";
+import { TaskTray } from '../components/TaskTray';
+import { TaskRequestFences } from '../components/taskRequestFence';
+import { taskStore } from '../state/taskStore';
 import { useConnectionGrace } from "../components/useConnectionGrace";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { chatStatus, formatUsage, localMessageStatusLabel } from "../components/status";
@@ -431,6 +434,16 @@ export function ChatScreen() {
     [suggestions, setSuggestions] = useState<string[]>([]);
   const playbackTrace = useRef<number|null>(null);
   const origin=appManager.getConfiguredOrigin();
+  useEffect(()=>{taskStore.activate(origin);},[origin,endpointEpoch]);
+  const tasks = useSyncExternalStore(taskStore.subscribe, () => taskStore.get(origin, id), () => taskStore.get(origin, id));
+  const [taskOpen,setTaskOpen]=useState(false), [taskRefreshing,setTaskRefreshing]=useState(false), [taskError,setTaskError]=useState<string|null>(null);
+  const [taskResult,setTaskResult]=useState<{id:string;text:string;loading:boolean;error:string|null}|null>(null);
+  const taskRequests=useRef(new TaskRequestFences()), taskRefreshRequest=useRef(taskRequests.current.refresh), taskResultRequest=useRef(taskRequests.current.result);
+  const taskCurrent=()=>appManager.getEndpointEpoch()===endpointEpoch && appManager.getConfiguredOrigin()===origin && appManager.getState().activeSessionId===id;
+  const refreshTasks=()=>{if(!taskCurrent())return;const token=taskRefreshRequest.current.begin();setTaskRefreshing(true);setTaskError(null);void taskStore.refresh(origin,id,endpointEpoch).catch(()=>{if(taskCurrent()&&taskRefreshRequest.current.valid(token))setTaskError('Could not refresh tasks. Check the connection and try again.');}).finally(()=>{if(taskCurrent()&&taskRefreshRequest.current.valid(token))setTaskRefreshing(false);});};
+  const selectTask=(child:string)=>{if(!taskCurrent())return;const token=taskResultRequest.current.begin();setTaskResult({id:child,text:'',loading:true,error:null});void appManager.request<{available?:boolean;rows?:unknown[]}>('session.transcript',{session_id:id,subagent_id:child,order:'latest',limit:50}).then(result=>{if(!taskCurrent()||!taskResultRequest.current.valid(token))return;setTaskResult({id:child,text:result.available===true && Array.isArray(result.rows)?result.rows.map(row=>text(obj(row).text ?? obj(row).content)).filter(Boolean).join('\n\n'):'',loading:false,error:result.available===true?null:'Transcript is unavailable.'});}).catch(()=>{if(taskCurrent()&&taskResultRequest.current.valid(token))setTaskResult({id:child,text:'',loading:false,error:'Could not load this transcript.'});});};
+  const interruptTask=(child:string)=>{if(!taskCurrent())return;setTaskError(null);void taskStore.interrupt(origin,id,child,endpointEpoch).catch(()=>{if(taskCurrent())setTaskError('Could not request stop. Refresh to check the task.');});};
+  useEffect(()=>{taskRefreshRequest.current.invalidate();taskResultRequest.current.invalidate();setTaskOpen(false);setTaskRefreshing(false);setTaskError(null);setTaskResult(null);},[origin,id,endpointEpoch]);
   const speechOwner=useMemo(()=>new SpeechOwner(new VoicePlayback(nativeVoicePlayback((text,signal)=>appManager.speakAudio(text,signal,endpointEpoch),()=>AppState.currentState==='active' && appManager.getEndpointEpoch()===endpointEpoch && appManager.getConfiguredOrigin()===origin && appManager.getState().activeSessionId===id,()=>conversationDiagnostics.mark(playbackTrace.current,'playback_start')))),[id,endpointEpoch,origin]);
   const speechState=useSyncExternalStore(speechOwner.playback.subscribe,speechOwner.playback.getState,speechOwner.playback.getState);
   const typedLease=useRef<SpeechLease|null>(null), voiceLease=useRef<SpeechLease|null>(null);
@@ -908,6 +921,7 @@ export function ChatScreen() {
             </Text>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Find in chat" onPress={()=>{cancelFindJump();findOpenRef.current=true;follow.dragStart();follow.dragEnd(false);setFindOpen(true);}} style={{width:48,height:48,borderRadius:24,alignItems:"center",justifyContent:"center",backgroundColor:colors.surface}}><Ionicons name="search" size={21} color={colors.accent}/></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Background tasks, ${tasks.length} observed`} onPress={()=>{setTaskOpen(true);refreshTasks();}} style={{width:48,height:48,borderRadius:24,alignItems:'center',justifyContent:'center',backgroundColor:colors.surface}}><Ionicons name="layers-outline" size={20} color={colors.accent}/>{tasks.length>0 && <Text style={{color:colors.accent,fontSize:10}}>{tasks.length}</Text>}</Pressable>
           {chat?.running && (
             <Pressable accessibilityRole="button" accessibilityLabel="Stop turn" onPress={() => void appManager.stop(id).catch(e => Alert.alert("Could not stop",String(e)))} style={{width:48,height:48,borderRadius:24,backgroundColor:colors.surface,alignItems:"center",justifyContent:"center"}}><Ionicons name="stop-outline" size={21} color={colors.accent} /></Pressable>
           )}
@@ -1183,6 +1197,7 @@ export function ChatScreen() {
         </View>
       </View>
       <MessageActionSheet key={`${endpointEpoch}:${id}`} target={actionTarget} onClose={()=>setActionTarget(null)} onQuote={onQuote} onRead={onReadReply} isCurrent={isCurrentChat} />
+      <TaskTray key={`${origin}:${endpointEpoch}:${id}`} visible={taskOpen} scope={JSON.stringify([origin,endpointEpoch,id])} tasks={tasks} refreshing={taskRefreshing} error={taskError} result={taskResult} onClose={()=>{taskRefreshRequest.current.invalidate();taskResultRequest.current.invalidate();setTaskOpen(false);setTaskRefreshing(false);setTaskResult(null);}} onRefresh={refreshTasks} onSelect={selectTask} onInterrupt={interruptTask} />
       <Button secondary label={`Speak replies: ${speakReplies===null?'Off for typed':speakReplies?'On':'Off'}`} onPress={()=>{const next=speakReplies!==true;setSpeakReplies(next);if(!next){for(const close of speechWatches.current)close();typedLease.current?.release();typedLease.current=null;}}} />
       {typedLease.current?.owns() && speechState.phase!=='idle' && <View style={{flexDirection:'row',gap:8}}><Text style={ui.muted}>Speaking reply</Text><Button secondary label={speechState.phase==='paused'?'Resume':'Pause'} onPress={()=>typedLease.current?.toggle()} /><Button secondary label="Stop" onPress={()=>{typedLease.current?.release();typedLease.current=null;}} /></View>}
       {voice && <VoiceSheet sessionId={id} origin={appManager.getConfiguredOrigin()} endpointEpoch={endpointEpoch} title={row?.title || "Chat"} model={String(obj(chat?.snapshot?.info).model ?? row?.model ?? "Default model")} reasoning={String(obj(chat?.snapshot?.info).reasoning_effort ?? "Default reasoning")} reply={voice.reply} owner={speechOwner} lease={voice.lease} setPlaybackTrace={trace=>{playbackTrace.current=trace;}} onClose={()=>closeVoice(voice.lease)} />}

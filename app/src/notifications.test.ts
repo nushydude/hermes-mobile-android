@@ -10,6 +10,16 @@ import { getMonitorStatus, notifyEvent, reconcileSnapshot, registerNotifications
 const event = {type:'approval.request',session_id:'s',replay_epoch:'e',seq:1,execution_generation:2,payload:{prompt_id:'p',choices:['once','deny','always']}};
 beforeEach(()=>{m.seen.clear();m.shown.clear();m.display.mockClear();m.cancel.mockClear();m.origin='https://example.test';m.gate=null;m.failDisplay=false;m.openFail=false;m.initialFail=false;m.queries=[];m.state.activeSessionId=null;m.state.sessions=[];});
 describe('native notification adapter',()=>{
+ it('persists a child terminal identity across replays and ignores unconfirmed outcomes',async()=>{
+  const task={type:'subagent.complete',session_id:'s',payload:{subagent_id:'child',status:'completed',summary:'private'}};
+  await notifyEvent(m.origin,task);
+  await notifyEvent(m.origin,{...task,seq:9,replay_epoch:'new'});
+  await notifyEvent(m.origin,{...task,payload:{...task.payload,status:'failed'}});
+  await notifyEvent(m.origin,{...task,payload:{...task.payload,subagent_id:'other',status:'running'}});
+  expect(m.display).toHaveBeenCalledTimes(1);
+  expect(m.seen.size).toBe(1);
+  expect(m.display.mock.calls[0][0].body).not.toContain('private');
+ });
  it('deduplicates live replay and snapshots and cancels settled prompts',async()=>{
   await notifyEvent('https://example.test',event);
   await notifyEvent('https://example.test',event);

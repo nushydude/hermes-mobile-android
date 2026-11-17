@@ -45,3 +45,9 @@ Phase2 commit: `e69d13b`.
 ## Phase 3 — native voice gate
 
 Evaluated and deferred: installed upstream lacks the required supported same-session external exchange commit, and included-credit hard stops remain unverified. Independent GPT-6.1 Sol/xhigh outcome review cleared this decision with no tools, based on supplied source/status evidence. Native voice remains disabled; no new account/plan/provider/credential/configuration was introduced. Continue safe independent phases. See [gate evidence and reopening requirements](conversational-phase3-gate.md).
+
+## Phase 4 — observed background tasks
+
+Implemented bounded per-origin/parent task observations, persisted cache with memory fallback, task tray, parent-scoped child transcript reads, specific child stop requests and replay-deduplicated terminal notifications. The tray exposes existing work; it does not dispatch or promise detached execution. Missing unfinished children become Unknown; explicit terminal evidence is retained. See [contracts and limits](conversational-phase4.md).
+
+Independent GPT-6.1 Sol/xhigh review cleared R1 after repairing session-specific refresh fencing, deterministic first-terminal restore ordering and optional-cache initialization failure. Main passed the pre-repair complete380-check aggregate/types/contract; final repaired aggregate and APK evidence are recorded in the release record. No real child inference, phone or background lifecycle acceptance was run. The owned empty-session contract fixture was archived without a prompt.

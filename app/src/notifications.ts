@@ -2,7 +2,7 @@ import notifee, { AndroidForegroundServiceType, AndroidImportance, AndroidStyle,
 import { AppState, Linking } from 'react-native';
 import * as SQLite from 'expo-sqlite';
 import { appManager } from './state';
-import { eventKey, safeChoices, sessionFromUrl, sessionUrl } from './notificationCore';
+import { eventKey, safeChoices, sessionFromUrl, sessionUrl, taskTerminalKey } from './notificationCore';
 import { getMonitorMode, subscribeMonitorMode } from './preferences';
 import { notificationText, notificationLiteral } from './notificationText';
 import { monitorStatus } from './components/monitorStatus';
@@ -97,15 +97,15 @@ async function handleEvent(event: Event) {
   try { await appManager.respondNotificationApproval(data, choice); if (event.detail.notification?.id) await notifee.cancelNotification(event.detail.notification.id); }
   catch { await channels(); await notifee.displayNotification({title:'Could not respond to approval',body:'Open Hermes Mobile to check the request.',android:{channelId:channel,pressAction:{id:'default'}}}); }
 }
-const notificationTypes = new Set(['approval.request','approval.settled','approval.cancelled','clarify.request','clarify.settled','message.complete']);
+const notificationTypes = new Set(['approval.request','approval.settled','approval.cancelled','clarify.request','clarify.settled','message.complete','subagent.complete']);
 export function notifyEvent(origin:string, event:any) { if (!notificationTypes.has(event?.type)) return Promise.resolve(); return enqueue(() => notifyEventNow(origin,event)); }
 async function notifyEventNow(origin:string, event:any) {
   if (appManager.getConfiguredOrigin() !== origin) return;
   const session = event.session_id, p = event.payload ?? {};
   if (!session || typeof session !== 'string') return;
   if (['approval.settled','approval.cancelled','clarify.settled'].includes(event.type) && typeof p.prompt_id === 'string') { await notifee.cancelNotification(idFor(origin,session,p.prompt_id)); return; }
-  if (!['message.complete','approval.request','clarify.request'].includes(event.type)) return;
-  const key = (event.type === 'approval.request' || event.type === 'clarify.request') && typeof p.prompt_id === 'string' && Number.isSafeInteger(event.execution_generation) ? JSON.stringify([origin,session,p.prompt_id,event.execution_generation,event.type]) : eventKey(origin,event); if (!key) return;
+  if (!['message.complete','approval.request','clarify.request','subagent.complete'].includes(event.type)) return;
+  const key = event.type === 'subagent.complete' ? taskTerminalKey(origin,event) : (event.type === 'approval.request' || event.type === 'clarify.request') && typeof p.prompt_id === 'string' && Number.isSafeInteger(event.execution_generation) ? JSON.stringify([origin,session,p.prompt_id,event.execution_generation,event.type]) : eventKey(origin,event); if (!key) return;
   if (db.getFirstSync('SELECT key FROM seen WHERE key = ?', key)) return;
   if (visibleSession(session)) { remember(key); return; }
   await channels();
@@ -117,9 +117,9 @@ async function notifyEventNow(origin:string, event:any) {
   const state = appManager.getState();
   const info = state.chats[session]?.snapshot?.info;
   const title = state.sessions.find(row => row.id === session)?.title || (info && typeof info === 'object' && 'title' in info ? info.title : undefined);
-  const copy = notificationText(event.type, p, title);
+  const copy = event.type === 'subagent.complete' ? {title:'Background task update',body:'Open the conversation to see the task result.',expanded:'Open the conversation to see the task result.'} : notificationText(event.type, p, title);
   await notifee.displayNotification({
-    id:prompt ? idFor(origin,session,prompt) : `turn:${encodeURIComponent(JSON.stringify([origin,session]))}`,
+    id:prompt ? idFor(origin,session,prompt) : event.type === 'subagent.complete' ? `task:${encodeURIComponent(key)}` : `turn:${encodeURIComponent(JSON.stringify([origin,session]))}`,
     title:notificationLiteral(copy.title), body:notificationLiteral(copy.body),
     data:{url:sessionUrl(session),origin,session,prompt,generation:String(event.execution_generation ?? '')},
     android:{channelId:channel,pressAction:{id:'default'},actions,visibility:AndroidVisibility.PRIVATE,
