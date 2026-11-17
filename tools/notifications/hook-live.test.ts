@@ -1,16 +1,11 @@
-import { gatewayOrigin, hermesHome, ntfyOrigin } from '../config.mjs';
+import { gatewayOrigin, ntfyOrigin, readDeploymentToken } from '../config.mjs';
 // Explicit PC-only integration. No phone/Android interaction or existing chat mutation.
 import {readFileSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
 import {expect,it} from 'vitest';
 import {CanonicalClient} from '@hermes-mobile/protocol';
 
 it('ordinary GUI worker hooks publish a generic private notification with the session link',async()=>{
-  const env=readFileSync(join(hermesHome(),'.env'),'utf8');
-  const matches=[...env.matchAll(/^\s*(?:export\s+)?HERMES_DASHBOARD_SESSION_TOKEN\s*=\s*(.*)$/gm)];
-  if(matches.length!==1)throw Error('Credential configuration unavailable');
-  let token=matches[0][1].trim(); if((token.startsWith('"')&&token.endsWith('"'))||(token.startsWith("'")&&token.endsWith("'")))token=token.slice(1,-1);
-  if(!token||token.startsWith('file:'))throw Error('Credential configuration unavailable');
+  const token = readDeploymentToken();
   const cfg=JSON.parse(readFileSync('.artifacts/notifications/plugin-config.json','utf8'));
   const client=new CanonicalClient({baseUrl:gatewayOrigin(),getToken:async()=>token,persistSubmission:async()=>{},acknowledgeSubmission:async()=>{}});
   let owned:string|null=null,observed=false;

@@ -1,6 +1,6 @@
 import { JsonRpcGatewayError, JsonRpcRequestChannel, wireFrameText, type ServerRequest } from './vendor/json-rpc-channel.js';
 import { reconnectBackoffDelayMs, isStableOpen } from './vendor/reconnect-backoff.js';
-import { randomUuid } from './vendor/session-http-mutations.js';
+import { randomUUID } from './uuid.js';
 import type { GatewayEvent } from './vendor/gateway-events.js';
 import type { CanonicalRpcMethods } from './vendor/gateway-contract.generated.js';
 
@@ -45,6 +45,8 @@ export interface ClientOptions {
   acknowledgeSubmission: (submission: PendingSubmission, receipt: unknown) => Promise<void>;
   /** The UI owns the input. AbortSignal fires on request.cancel or connection loss. */
   requestSecret?: (method: 'sudo' | 'secret', params: Record<string, unknown>, signal: AbortSignal) => Promise<string>;
+  /** Identity reported in session.create; defaults to the protocol SDK identity. */
+  clientIdentity?: { name: string; version: string };
   createId?: () => string;
   requestTimeoutMs?: number;
   connectTimeoutMs?: number;
@@ -64,6 +66,7 @@ interface SessionState {
   allowMissingPrefix: boolean;
   /** Per turn+segment text, in UTF-16 units, retained across reconnects. */
   segments: Map<string, { start: number; text: string }>;
+  completedTurns: Set<string>;
 }
 class SessionDetachedError extends Error { constructor() { super('Session was detached'); } }
 const bridge = /^(?:preview\.|terminal\.read$|window\.read$|tour$|theme\.|vault\.|setup_beat$)/;
@@ -124,7 +127,7 @@ export class CanonicalClient {
       this.readyWaiters.clear();
     }
   }
-  private id(): string { return this.opts.createId?.() ?? randomUuid(); }
+  private id(): string { return this.opts.createId?.() ?? randomUUID(); }
 
   /** Initial connection resolves only after canonical authority and capability checks. */
   async connect(): Promise<void> {
@@ -203,6 +206,7 @@ export class CanonicalClient {
       rejectReady(new Error('Gateway connection closed'));
       this.socket = null;
       this.channel.detach(new Error('Gateway connection lost'));
+      this.unboundEvents = [];
       this.abortServerRequests();
       socket.close();
       if (this.desired && this.state !== 'incompatible' && this.state !== 'auth-failed') {
@@ -232,6 +236,22 @@ export class CanonicalClient {
       if (generation === this.generation) { this.channel.detach(new Error('Gateway connection lost')); this.socket = null; socket.close(); }
       throw error;
     } finally { clearTimeout(timer); }
+  }
+
+  /** Immediately fence frames even if the platform closes the socket asynchronously. */
+  private retireSocket(): void {
+    const socket = this.socket;
+    if (!socket) return;
+    this.socket = null;
+    this.channel.detach(new Error('Gateway connection lost'));
+    this.unboundEvents = [];
+    this.abortServerRequests();
+    socket.close();
+    if (this.desired && this.state !== 'incompatible' && this.state !== 'auth-failed') {
+      if (isStableOpen(this.openedAt)) this.attempt = 0;
+      this.openedAt = null;
+      this.scheduleReconnect();
+    }
   }
 
   private scheduleReconnect(): void {
@@ -288,7 +308,7 @@ export class CanonicalClient {
     const contract = this.descriptor?.session_create;
     if (!contract?.sources.includes('gui')) throw new Error('Gateway does not support GUI sessions');
     const params: RecordValue = { ...options, source: 'gui', request_id: this.id() };
-    if (contract.parameters.includes('client')) params.client = { name: 'hermes-mobile', version: '0.1.0' };
+    if (contract.parameters.includes('client')) params.client = this.opts.clientIdentity ?? { name: 'hermes-mobile', version: '0.1.0' };
     for (const key of Object.keys(params)) if (!contract.parameters.includes(key)) throw new Error(`Unsupported create option: ${key}`);
     return this.request<Snapshot>('session.create', params);
   }
@@ -305,7 +325,7 @@ export class CanonicalClient {
     const existing = this.sessions.get(id);
     if (existing?.opening) return existing.opening;
     if (existing?.snapshot && !existing.rebuilding) return existing.snapshot;
-    const session: SessionState = existing ?? { id, cursor: 0, replayEpoch: null, revision: 0, generation: 0, hold: [], cancelled: false, allowMissingPrefix: false, segments: new Map() };
+    const session: SessionState = existing ?? { id, cursor: 0, replayEpoch: null, revision: 0, generation: 0, hold: [], cancelled: false, allowMissingPrefix: false, segments: new Map(), completedTurns: new Set() };
     this.sessions.set(id, session);
     session.hold = [];
     const opening = this.finishOpen(session, !!existing);
@@ -332,32 +352,48 @@ export class CanonicalClient {
   }
 
   private async finishOpen(session: SessionState, existing: boolean): Promise<Snapshot> {
+    const previousCursor = session.cursor;
+    const previousEpoch = session.replayEpoch;
+    const socketGeneration = this.generation;
     try {
       const snapshot = await this.resumeSnapshot(session);
-      this.applySnapshot(session, snapshot, 'resume');
+      const reconstruct = !existing || previousEpoch !== snapshot.replay_epoch;
+      this.applySnapshot(session, snapshot, reconstruct && existing ? 'rebuild' : 'resume');
       this.routeUnboundEvents();
-      // An initial mount may join a turn already streaming elsewhere. Ask the
-      // ring for that turn after learning its epoch from the snapshot. Only
-      // the active generation is delivered; historical turns are in messages.
-      if (snapshot.running === true) {
-        const replay = await this.channel.request<Replay>('session.events.since', { session_id: session.id, last_sequence: 0, replay_epoch: snapshot.replay_epoch } satisfies CanonicalRpcMethods['session.events.since']['params']);
+      // Refresh keeps the consumer's current baseline and only replays newer
+      // events. Initial joins (and changed epochs) reconstruct from the ring.
+      if (snapshot.running === true || (!reconstruct && previousCursor < snapshot.last_sequence)) {
+        const cursor = reconstruct ? 0 : previousCursor;
+        const replay = await this.channel.request<Replay>('session.events.since', { session_id: session.id, last_sequence: cursor, replay_epoch: snapshot.replay_epoch } satisfies CanonicalRpcMethods['session.events.since']['params']);
         if (session.cancelled) throw new SessionDetachedError();
-        if (!Array.isArray(replay?.events)) throw new Error('Invalid replay response');
+        if (!Array.isArray(replay?.events) || typeof replay.snapshot_required !== 'boolean' || typeof replay.truncated !== 'boolean' || typeof replay.replay_epoch !== 'string' || !numeric(replay.last_sequence)) throw new Error('Invalid replay response');
         if (!replay.snapshot_required && !replay.truncated && replay.replay_epoch === snapshot.replay_epoch) {
-          session.cursor = 0;
-          for (const event of replay.events) if (event.execution_generation === snapshot.execution_generation) this.applyEvent(event);
+          session.cursor = cursor;
+          for (const event of replay.events) if (!reconstruct || event.execution_generation === snapshot.execution_generation) this.applyEvent(event);
         } else {
           session.allowMissingPrefix = true;
           this.opts.onEvent?.({ type: 'session.replay_gap', session_id: session.id, payload: { replay_epoch: replay.replay_epoch } });
         }
-      }
+      } else if (!reconstruct) session.cursor = previousCursor;
       if (session.cancelled) throw new SessionDetachedError();
       this.flushHold(session);
       session.cursor = Math.max(session.cursor, snapshot.last_sequence);
       return snapshot;
     } catch (error) {
-      if (!existing && this.sessions.get(session.id) === session) this.sessions.delete(session.id);
-      else session.hold = null;
+      // Resume may have acquired a subscription even when its reply was lost,
+      // malformed, or later replay failed. Retire that socket before dropping
+      // ownership; closing also prevents unfenced events from that acquisition.
+      if (!(error instanceof SessionDetachedError) && socketGeneration === this.generation && this.channel.connected) this.retireSocket();
+      if (!existing && this.sessions.get(session.id) === session) {
+        this.sessions.delete(session.id);
+        this.unboundEvents = this.unboundEvents.filter(event => event.session_id !== session.id);
+      } else {
+        session.hold = null;
+        // A failed refresh must reconnect from the last delivered event, not
+        // the newer snapshot watermark that was never replayed.
+        session.cursor = previousCursor;
+        session.replayEpoch = previousEpoch;
+      }
       this.routeUnboundEvents();
       throw error;
     }
@@ -455,6 +491,7 @@ export class CanonicalClient {
     session.generation = snapshot.execution_generation;
     if (reason === 'rebuild') {
       session.segments.clear();
+      session.completedTurns.clear();
       session.allowMissingPrefix = snapshot.running === true;
     }
     this.opts.onSnapshot?.(session.id, snapshot, reason);
@@ -558,10 +595,16 @@ export class CanonicalClient {
     if (numeric(input.execution_generation)) session.generation = input.execution_generation;
     if (numeric(payload.execution_generation)) session.generation = payload.execution_generation;
     if (input.type === 'message.start') session.allowMissingPrefix = false;
-    if (input.type === 'message.complete') session.allowMissingPrefix = false;
+    const turn = String(payload.turn_id ?? input.admission_id ?? input.execution_generation ?? '');
+    if (input.type === 'message.complete') {
+      session.allowMissingPrefix = false;
+      for (const key of session.segments.keys()) if (key.slice(0, key.lastIndexOf(':')) === turn) session.segments.delete(key);
+      session.completedTurns.add(turn);
+      if (session.completedTurns.size > 512) session.completedTurns.delete(session.completedTurns.values().next().value as string);
+    }
     let event = input;
     if (input.type === 'message.delta' && typeof payload.text === 'string' && numeric(payload.segment) && numeric(payload.offset)) {
-      const turn = String(payload.turn_id ?? input.admission_id ?? input.execution_generation ?? '');
+      if (session.completedTurns.has(turn)) return;
       const key = `${turn}:${payload.segment}`;
       const previous = session.segments.get(key);
       const start = payload.offset as number;

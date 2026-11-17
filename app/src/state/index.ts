@@ -3,13 +3,14 @@ import { AppState as NativeAppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
 import * as SQLite from 'expo-sqlite';
-import { CanonicalClient, JsonRpcGatewayError, type GatewayEvent, type PendingSubmission } from '@hermes-mobile/protocol';
+import { CanonicalClient, JsonRpcGatewayError, randomUUID, type GatewayEvent, type PendingSubmission } from '@hermes-mobile/protocol';
 import type { AppState, ChatState, QueuedEdit, SessionRow } from '../types';
 import { compactActivity, emptyChat, mergeSessions, reduceEvent, snapshotChat } from './reducer';
 import { ImageReads } from './imageReads';
 import { notifyEvent, reconcileSnapshot } from '../notifications';
 import { limitedText } from './voiceHttp';
 import { validAction } from '../notificationCore';
+import { buildVersion } from '../buildVersion';
 
 const BASE = 'hermes.baseUrl', TOKEN = 'hermes.token', CONFIG = 'hermes.config.v1';
 type Credentials = {version: 1; origin: string; token: string};
@@ -21,7 +22,7 @@ function restorePosition<T extends {submission_id: string; enqueue_order: number
   if (current.some(x => x.submission_id === item.submission_id)) return current;
   return [...current, item].sort((a,b) => a.enqueue_order - b.enqueue_order);
 }
-const id = () => { const b = new Uint8Array(16); globalThis.crypto.getRandomValues(b); b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128; const h = Array.from(b, x => x.toString(16).padStart(2, '0')).join(''); return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`; };
+const id = randomUUID;
 
 export class AppManager {
   private state = initial();
@@ -68,12 +69,36 @@ export class AppManager {
   private eventTimer: ReturnType<typeof setTimeout> | null = null;
   private cacheTimer: ReturnType<typeof setTimeout> | null = null;
   private cleanup: Array<() => void> = [];
-  private secret: { resolve: (v: string) => void; reject: (e: Error) => void } | null = null;
+  private secret: { request: NonNullable<AppState['secureRequest']>; resolve: (v: string) => void; reject: (e: Error) => void } | null = null;
+  private warningVersions = new Map<string, number>();
+  private storageWarning: {kind:string; message:string; revision:number; epoch:number} | null = null;
+  private clearCoveredWarning(coverage: 'draft' | 'full', revision: number, epoch: number) {
+    const warning = this.storageWarning;
+    if (!warning || warning.epoch !== epoch || this.endpointEpoch !== epoch ||
+        warning.revision > revision || this.draftRevision > revision ||
+        (coverage === 'draft' && warning.kind !== 'draft') || this.state.error !== warning.message) return;
+    this.storageWarning = null;
+    this.update({error:null});
+  }
+  private checkpointWarning(kind: string, write: Promise<void>, message: string) {
+    const epoch = this.endpointEpoch;
+    const revision = this.draftRevision;
+    const version = (this.warningVersions.get(kind) ?? 0) + 1;
+    this.warningVersions.set(kind, version);
+    return write.catch(error => {
+      if (this.endpointEpoch === epoch && this.warningVersions.get(kind) === version) {
+        this.storageWarning = {kind, message, revision, epoch};
+        this.update({error:message});
+      }
+      throw error;
+    });
+  }
   getState = () => this.state;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
-  private update(patch: Partial<AppState>) { this.state = { ...this.state, ...patch }; this.listeners.forEach(fn => fn()); }
+  private update(patch: Partial<AppState>) { if ('error' in patch && patch.error !== this.storageWarning?.message) this.storageWarning = null; this.state = { ...this.state, ...patch }; this.listeners.forEach(fn => fn()); }
   private persist(): Promise<void> {
     const key = this.baseUrl ? cacheKey(this.baseUrl) : 'state'; const payload = { sessions: this.state.sessions, chats:this.state.chats, drafts: this.state.drafts, draftRevision:++this.draftRevision, outbox: this.state.outbox, historyTruncated: this.state.historyTruncated, nextOrdinal: this.nextOrdinal, queuedEdits: this.state.queuedEdits, recent: this.recent }; const data = JSON.stringify(this.baseUrl ? {version:1, origin:this.baseUrl, payload} : payload);
+    const epoch = this.endpointEpoch, revision = payload.draftRevision;
     if (this.commitSource !== null && this.baseUrl === this.commitSource) {
       const stash = this.commitSource === '' && this.commitTarget ? {key:cacheKey(this.commitTarget), data:JSON.stringify({version:1, origin:this.commitTarget, payload:this.commitTargetPayload ? this.mergeUnbound(this.commitTargetPayload, payload) : payload})} : {key, data};
       this.pendingCaches.set(stash.key, stash);
@@ -84,6 +109,7 @@ export class AppManager {
       const pending = this.pendingCaches.get(key);
       await this.db.runAsync('INSERT OR REPLACE INTO app_cache (key, value) VALUES (?, ?)', key, data);
       if (pending && pending.data === data && this.pendingCaches.get(key) === pending) this.pendingCaches.delete(key);
+      this.clearCoveredWarning('full', revision, epoch);
     });
     this.writes = write; return write;
   }
@@ -92,10 +118,12 @@ export class AppManager {
   private persistDrafts(): Promise<void> {
     if (this.commitSource !== null) return this.persist();
     const origin = this.baseUrl;
-    const data = JSON.stringify({version:1, origin, revision:++this.draftRevision, drafts:this.state.drafts});
+    const revision = ++this.draftRevision, epoch = this.endpointEpoch;
+    const data = JSON.stringify({version:1, origin, revision, drafts:this.state.drafts});
     const write = this.writes.catch(() => {}).then(async () => {
       if (!this.db) throw new Error('Local storage is unavailable');
       await this.db.runAsync('INSERT OR REPLACE INTO app_cache (key, value) VALUES (?, ?)', `drafts:${origin}`, data);
+      this.clearCoveredWarning('draft', revision, epoch);
     });
     this.writes = write; return write;
   }
@@ -110,7 +138,7 @@ export class AppManager {
     this.draftRevision = Math.max(this.draftRevision, Number(payload.draftRevision) || 0);
     return payload;
   }
-  private scheduleCache() { if (!this.cacheTimer) this.cacheTimer = setTimeout(() => { this.cacheTimer = null; void this.persist().catch(() => this.update({ error: 'Could not save local cache.' })); }, 500); }
+  private scheduleCache() { if (!this.cacheTimer) this.cacheTimer = setTimeout(() => { this.cacheTimer = null; void this.checkpointWarning('cache', this.persist(), 'Could not save local cache.').catch(() => {}); }, 500); }
   initialize = (): Promise<void> => {
     if (this.initPromise) return this.initPromise;
     this.initPromise = this.init(); return this.initPromise;
@@ -259,7 +287,7 @@ export class AppManager {
   private startClient(credentials: Credentials) { const staged = this.makeClient(credentials); this.client = staged.client; staged.activate(); }
   private makeClient(credentials: Credentials) {
     let active = false;
-    const client = new CanonicalClient({ baseUrl: credentials.origin, getToken: async () => credentials.token,
+    const client = new CanonicalClient({ clientIdentity: {name:'hermes-mobile', version:buildVersion}, baseUrl: credentials.origin, getToken: async () => credentials.token,
       onState: connection => { if (this.client !== client || !active) return; this.update({ connection }); if (active && connection === 'ready') { void this.refreshSessions().catch(() => {}); void this.reopen().catch(() => {}); } },
       onSnapshot: (sessionId, snapshot, reason) => { if (this.client !== client || !active) return; this.transcriptVersions.set(sessionId, (this.transcriptVersions.get(sessionId) ?? 0) + 1); this.flushEvents(); this.snapshotCutoffs.set(sessionId, { epoch: snapshot.replay_epoch, sequence: snapshot.last_sequence, running: snapshot.running === true }); this.setChat(sessionId, snapshotChat(snapshot, this.state.chats[sessionId], reason === 'rebuild')); void reconcileSnapshot(credentials.origin, sessionId, snapshot).catch(() => {});  },
       onEvent: event => { if (this.client !== client || !active) return; if (this.isCoveredBySnapshot(event)) return; for (const listener of this.voiceListeners) { try { listener(event); } catch {} } void notifyEvent(credentials.origin, event).catch(() => {}); if (event.type === 'sessions.changed') { void this.refreshSessions().catch(() => {}); return; } this.events.push(event); if (event.type === 'message.complete' && event.session_id) void this.refreshTranscript(event.session_id).catch(() => {}); if (!this.eventTimer) this.eventTimer = setTimeout(() => this.flushEvents(), 50); },
@@ -267,7 +295,7 @@ export class AppManager {
       onPartialUnavailable: sessionId => { if (this.client !== client || !active) return; const chat = this.state.chats[sessionId] ?? emptyChat(); this.setChat(sessionId, { ...chat, partialUnavailable: true }); },
       persistSubmission: async submission => { if (this.client !== client || !active) throw new Error('Gateway changed'); if (!this.state.outbox.some(x => x.submission_id === submission.submission_id)) throw new Error('Submission is no longer queued'); await this.persist(); },
       acknowledgeSubmission: async (submission, receipt) => { if (this.client !== client || !active) throw new Error('Gateway changed'); const key = `outbox:${submission.submission_id}`, version = this.version(key), saved = this.state.outbox.find(x => x.submission_id === submission.submission_id); const chat = this.state.chats[submission.session_id] ?? emptyChat(); const admission = asObject(receipt).admission_id; this.update({ chats: { ...this.state.chats, [submission.session_id]: { ...chat, localMessages: (chat.localMessages ?? []).map(x => x.submission_id === submission.submission_id ? { ...x, status: 'accepted', ...(typeof admission === 'string' ? {admission_id: admission} : {}) } : x) } }, outbox: this.state.outbox.filter(x => x.submission_id !== submission.submission_id) }); try { await this.persist(); } catch (error) { if (this.client === client && saved && this.operationVersions.get(key) === version && !this.state.outbox.some(x => x.submission_id === submission.submission_id)) { this.update({ outbox: restorePosition(this.state.outbox, saved!) }); try { await this.persist(); } catch {} } throw error; } },
-      requestSecret: (method, params, signal) => new Promise((resolve, reject) => { if (this.client !== client || !active || signal.aborted) { reject(new Error('Request cancelled')); return; } this.secret?.reject(new Error('Superseded')); this.secret = { resolve, reject }; this.update({ secureRequest: { method, params } }); signal.addEventListener('abort', () => { if (this.secret?.resolve === resolve) { this.secret = null; this.update({ secureRequest: null }); reject(new Error('Request cancelled')); } }, { once: true }); })
+      requestSecret: (method, params, signal) => new Promise((resolve, reject) => { if (this.client !== client || !active || signal.aborted) { reject(new Error('Request cancelled')); return; } this.secret?.reject(new Error('Superseded')); const request = { method, params }; this.secret = { request, resolve, reject }; this.update({ secureRequest: request }); signal.addEventListener('abort', () => { if (this.secret?.resolve === resolve) { this.secret = null; this.update({ secureRequest: null }); reject(new Error('Request cancelled')); } }, { once: true }); })
     });
     return {client, activate: () => { active = true; if (this.client === client && this.state.connection === 'ready') { void this.refreshSessions().catch(() => {}); void this.reopen().catch(() => {}); } }};
   }
@@ -409,14 +437,14 @@ export class AppManager {
   findByTitle = async (title: string) => { const result = await this.request<{sessions: SessionRow[]}>('session.list', {title}); return mergeSessions([], result.sessions); };
   openSession = async (sessionId: string) => { this.flushEvents(); const epoch = this.endpointEpoch; this.update({ activeSessionId: sessionId, sessions: this.state.sessions.map(row => row.id === sessionId ? { ...row, unread: false } : row) }); this.recent = [sessionId, ...this.recent.filter(x => x !== sessionId)]; while (this.recent.length > 8) { const index = this.recent.findLastIndex(x => x !== sessionId && !this.state.chats[x]?.running && !this.state.chats[x]?.prompts.length && !this.state.chats[x]?.pending.length); if (index < 0) break; const [old] = this.recent.splice(index, 1); void this.client?.detachSession(old).catch(() => {}); } this.trimIdleChats(); await this.persist(); this.assertEndpointEpoch(epoch); if (this.state.connection !== 'ready' || this.state.chats[sessionId]?.sessionUnavailable) return sessionId; const client = this.requireClient(); const snapshot = await client.openSession(sessionId); if (this.client !== client) return; await this.resolveSessionAlias(sessionId, snapshot.session_id, client); void this.recoverReceipts(snapshot.session_id, client); return snapshot.session_id; };
   createSession = async (options: Record<string, unknown> = {}) => { const epoch = this.endpointEpoch; const client = this.requireClient(); const snapshot = await client.createSession(options); this.assertEndpointEpoch(epoch); const resolved=await this.openSession(snapshot.session_id); await this.refreshSessions(); return resolved ?? snapshot.session_id; };
-  setDraft = (sessionId: string, text: string) => { if (this.state.drafts[sessionId] === text) return; this.draftVersions.set(sessionId, (this.draftVersions.get(sessionId) ?? 0) + 1); this.update({ drafts: { ...this.state.drafts, [sessionId]: text } }); void this.persistDrafts().catch(() => this.update({error: 'Could not save your draft.'})); };
+  setDraft = (sessionId: string, text: string) => { if (this.state.drafts[sessionId] === text) return; this.draftVersions.set(sessionId, (this.draftVersions.get(sessionId) ?? 0) + 1); this.update({ drafts: { ...this.state.drafts, [sessionId]: text } }); void this.checkpointWarning('draft', this.persistDrafts(), 'Could not save your draft.').catch(() => {}); };
   setDraftAttachments = (sessionId:string, attachments:NonNullable<ChatState['draftAttachments']>) => {
     const previous=this.state.chats[sessionId]?.draftAttachments ?? [];
     if(attachments.length>10&&attachments.length>=previous.length)throw new Error('A prompt can include up to 10 images. Remove images before sending.');
     this.version(`attachments:${sessionId}`);
     const chat=this.state.chats[sessionId] ?? emptyChat();
     this.setChat(sessionId,{...chat,draftAttachments:attachments});
-    return this.persist().catch(error=>{this.update({error:'Could not save draft images. Keep the app open and try again.'});throw error;});
+    return this.checkpointWarning('images', this.persist(), 'Could not save draft images. Keep the app open and try again.');
   };
   importSharedDraft = (sessionId:string,shareId:string,text:string,images:NonNullable<ChatState['draftAttachments']>,valid?:()=>boolean) => this.queueForEndpoint(async()=>{
     if(valid&&!valid())throw new Error('Share preparation was cancelled.');
@@ -459,7 +487,24 @@ export class AppManager {
     this.update({chats, sessions, ...(hasRecovery ? {outbox:this.state.outbox.map(x => x.session_id === sessionId ? {...x, error:'This session is unavailable. Copy this message to a draft or discard it.'} : x), queuedEdits:this.state.queuedEdits.map(x => x.session_id === sessionId ? {...x, error:'This session is unavailable. Copy this edit to a draft or discard it.'} : x)} : {}), ...(!hasRecovery && this.state.activeSessionId === sessionId ? {activeSessionId:null} : {})});
     await this.persist();
   };
-  mutate = async (sessionId: string, operation: string, payload: Record<string, unknown>) => { const client = this.requireClient(); if (operation === 'delete' && ((this.state.drafts[sessionId] ?? '').length || this.state.chats[sessionId]?.draftAttachments?.length || this.state.outbox.some(x => x.session_id === sessionId) || this.state.queuedEdits.some(x => x.session_id === sessionId))) throw new Error('Resolve the draft and queued messages before deleting this session.'); await client.openSession(sessionId); if (this.client !== client) throw new Error('Gateway changed'); const result = await client.mutate(sessionId, operation, payload); if (this.client !== client) return result; if (operation === 'delete') { await client.detachSession(sessionId).catch(() => {}); await this.forgetSession(sessionId); } await this.refreshSessions(); return result; };
+  mutate = async (sessionId: string, operation: string, payload: Record<string, unknown>) => {
+    const client = this.requireClient();
+    if (operation === 'delete' && ((this.state.drafts[sessionId] ?? '').length || this.state.chats[sessionId]?.draftAttachments?.length || this.state.outbox.some(x => x.session_id === sessionId) || this.state.queuedEdits.some(x => x.session_id === sessionId))) {
+      throw new Error('Resolve the draft and queued messages before deleting this session.');
+    }
+    await client.openSession(sessionId);
+    if (this.client !== client) throw new Error('Gateway changed');
+    const result = await client.mutate(sessionId, operation, payload);
+    if (this.client !== client) return result;
+    if (operation === 'delete') {
+      await client.detachSession(sessionId).catch(() => {});
+      if (this.client !== client) return result;
+      await this.forgetSession(sessionId, true);
+      if (this.client !== client) return result;
+    }
+    await this.refreshSessions();
+    return result;
+  };
   request = async <T = any>(method: string, params: Record<string, unknown> = {}) => { const client = this.requireClient(); const epoch = this.endpointEpoch; const result = await client.request<T>(method, params); this.assertEndpointEpoch(epoch); return result; };
   respondNotificationApproval = async (data: Record<string, unknown>, choice: string) => {
     const deadline = Date.now() + 15000;
@@ -478,7 +523,30 @@ export class AppManager {
   respondClarify = (sessionId: string, promptId: string, answer: unknown) => this.request('clarify.respond', {session_id:sessionId, execution_generation:this.promptGeneration(sessionId,promptId), prompt_id:promptId, answer});
   private promptGeneration(sessionId: string, promptId: string) { return asObject(this.state.chats[sessionId]?.prompts.find(p => asObject(p).prompt_id === promptId)).execution_generation ?? this.generation(sessionId); }
   private generation(sessionId: string) { return this.state.chats[sessionId]?.snapshot?.execution_generation ?? this.requireClient().getSession(sessionId)?.execution_generation; }
-  answerSecret = (value: string) => { const pending = this.secret; this.secret = null; this.update({ secureRequest: null }); pending?.resolve(value); };
+  answerSecret = (request: NonNullable<AppState['secureRequest']>, value: string) => {
+    const pending = this.secret;
+    if (!pending || pending.request !== request) return;
+    this.secret = null;
+    this.update({ secureRequest: null });
+    pending.resolve(value);
+  };
+  cancelSecret = (request: NonNullable<AppState['secureRequest']>) => {
+    const pending = this.secret;
+    if (!pending || pending.request !== request) return;
+    this.secret = null;
+    this.update({ secureRequest: null });
+    pending.reject(new Error('Request cancelled'));
+  };
+  captureDraft = (sessionId: string) => ({
+    epoch:this.endpointEpoch,
+    version:this.draftVersions.get(sessionId) ?? 0,
+    text:this.state.drafts[sessionId] ?? '',
+  });
+  replaceCapturedDraft = (sessionId: string, captured: ReturnType<AppManager['captureDraft']>, replacement: string) => {
+    if (captured.epoch === this.endpointEpoch && captured.version === (this.draftVersions.get(sessionId) ?? 0) && captured.text === (this.state.drafts[sessionId] ?? '')) {
+      this.setDraft(sessionId, replacement);
+    }
+  };
   stop = (sessionId: string) => this.request('session.interrupt', {session_id: sessionId, execution_generation: this.generation(sessionId)});
   steer = async (sessionId: string, text: string) => { const epoch = this.endpointEpoch; const result = await this.request<Record<string, unknown> | null>('session.steer', {session_id:sessionId, execution_generation:this.generation(sessionId), text}); this.assertEndpointEpoch(epoch); if (result?.status === 'queued' || result?.status === 'redirected') return result; if (result?.status === 'rejected' && result.delivered === false) { await this.send(sessionId,text); return result; } throw new Error('Steer delivery is uncertain. Your draft was kept.'); };
   cancelQueued = (sessionId: string, admissionId: string) => this.request('prompt.cancel', {session_id:sessionId, admission_id:admissionId});

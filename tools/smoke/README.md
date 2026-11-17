@@ -54,6 +54,12 @@ levels and archives its fixtures. It makes no prompt/LLM turn and does not chang
 It is a mutating fixture probe, not read-only. The provider can clamp further; a successful policy
 mutation does not prove native provider support.
 
+The reasoning and latency probes use a fresh UUID-suffixed title for each fixture. Titled
+`session.create` can resolve an existing chat, so these probes no longer recover or archive chats
+by matching a fixed title. Interrupted runs can leave an owned fixture behind; use its recorded
+session ID for deliberate cleanup. Evidence files alone are not permission to mutate a session
+on a different configured gateway.
+
 The model-options probe also applies the mobile OpenAI plus saved custom/local provider policy.
 The gateway's explicit_only flag alone includes borrowed CLI logins on this installation. Neither
 that flag nor a reasoning boolean supplies a complete per-model effort enum. See the later

@@ -1,4 +1,4 @@
-import { gatewayOrigin, hermesHome } from './config.mjs';
+import { gatewayOrigin, hermesHome, tokenEntries, parseDeploymentToken } from './config.mjs';
 // Never print credentials or HTTP response bodies. No dependency on app tooling.
 import { readFileSync, appendFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,7 +7,7 @@ import { randomBytes } from 'node:crypto';
 const envPath = join(hermesHome(), '.env');
 const key = 'HERMES_DASHBOARD_SESSION_TOKEN';
 const env = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
-const entries = [...env.matchAll(/^\s*(?:export\s+)?HERMES_DASHBOARD_SESSION_TOKEN\s*=\s*(.*)$/gm)];
+const entries = tokenEntries(env);
 const action = process.argv[2];
 if (action === 'provision') {
   if (entries.length) {
@@ -17,10 +17,7 @@ if (action === 'provision') {
     console.log('Generated 32-byte session token directly into Hermes .env; value hidden.');
   }
 } else if (action === 'verify') {
-  if (entries.length !== 1) throw new Error('Expected exactly one session token entry.');
-  let token = entries[0][1].trim();
-  if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) token = token.slice(1, -1);
-  if (!token || token.startsWith('file:')) throw new Error('Expected a nonempty literal token.');
+  const token = parseDeploymentToken(env);
   const base = gatewayOrigin();
   const status = await fetch(`${base}/api/status`, { signal: AbortSignal.timeout(15000), redirect: 'error' });
   const body = await status.json();

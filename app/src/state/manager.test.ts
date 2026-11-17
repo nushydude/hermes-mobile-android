@@ -4,7 +4,7 @@ vi.mock('react-native', () => ({ AppState: { addEventListener: vi.fn() } }));
 vi.mock('@react-native-community/netinfo', () => ({ default: { addEventListener: vi.fn() } }));
 vi.mock('expo-secure-store', () => ({ getItemAsync: async (k: string) => mocks.secure.get(k) ?? null, setItemAsync: async (k: string, v: string) => { if (mocks.secureHook) await mocks.secureHook(k,v); mocks.secure.set(k,v); }, deleteItemAsync: async (k: string) => { mocks.secure.delete(k); } }));
 vi.mock('expo-sqlite', () => ({ openDatabaseAsync: async () => ({ execAsync: async () => {}, getFirstAsync: async (_sql:string, key:string) => { if (mocks.readHook) await mocks.readHook(key); const value = mocks.rows ? mocks.rows.get(key) : mocks.saved; return value ? {value} : null; }, runAsync: async (_sql:string, _key:string, value:string) => { if (mocks.writeHook) await mocks.writeHook(value); if (mocks.blockWrite) { const block = mocks.blockWrite; mocks.blockWrite = null; await block(); } if (mocks.fail) throw Error('disk full'); mocks.saved=value; mocks.rows?.set(_key,value); } }) }));
-vi.mock('@hermes-mobile/protocol', () => ({ JsonRpcGatewayError: class extends Error {}, CanonicalClient: class {
+vi.mock('@hermes-mobile/protocol', () => ({ randomUUID: () => crypto.randomUUID(), JsonRpcGatewayError: class extends Error {}, CanonicalClient: class {
   opts:any; connectionState = 'offline'; runtime = {}; submissions:any[] = [];
   constructor(opts:any) { this.opts=opts; mocks.clients.push(this); }
   async connect() { if (mocks.connectHook) await mocks.connectHook(this); if (mocks.failConnect) throw Error('dial failed'); this.connectionState='ready'; this.opts.onState?.('ready'); }
@@ -238,7 +238,7 @@ it('keeps client credentials bound and refuses switching after a draft appears d
 it('rejects an already aborted secret without superseding an existing request', async () => {
   mocks.secure.set('hermes.baseUrl','https://a.test'); mocks.secure.set('hermes.token','fixture'); const manager = new AppManager(); await manager.initialize(); await flush();
   const client=mocks.clients[0], first=new AbortController(), cancelled=new AbortController(); const pending=client.opts.requestSecret('sudo',{prompt:'first'},first.signal); cancelled.abort();
-  await expect(client.opts.requestSecret('secret',{},cancelled.signal)).rejects.toThrow('cancelled'); expect(manager.getState().secureRequest?.params.prompt).toBe('first'); manager.answerSecret('answer'); await expect(pending).resolves.toBe('answer'); manager.dispose();
+  await expect(client.opts.requestSecret('secret',{},cancelled.signal)).rejects.toThrow('cancelled'); expect(manager.getState().secureRequest?.params.prompt).toBe('first'); manager.answerSecret(manager.getState().secureRequest!, 'answer'); await expect(pending).resolves.toBe('answer'); manager.dispose();
 });
 it('ignores an older transcript response after a newer completion', async () => {
   mocks.secure.set('hermes.baseUrl','https://a.test'); mocks.secure.set('hermes.token','fixture'); const manager = new AppManager(); await manager.initialize(); await flush(); const client=mocks.clients[0];
@@ -841,4 +841,105 @@ describe('shared drafts and draft image recovery', () => {
     expect(saved.drafts.s).toBe('First'); expect(saved.chats.s.importedShareIds).toEqual([shareId]);
     expect(manager.getState().outbox).toEqual([]); manager.dispose();
   });
+});
+
+
+it('preserves new endpoint and same-endpoint recovery during delayed deletion', async () => {
+  mocks.rows=new Map(); mocks.secure.set('hermes.baseUrl','https://old.example'); mocks.secure.set('hermes.token','fixture');
+  const manager=new AppManager(); await manager.initialize(); await flush();
+  const old=mocks.clients[0]; let release!:()=>void, entered!:()=>void;
+  let blocked=new Promise<void>(resolve=>{release=resolve;}); let started=new Promise<void>(resolve=>{entered=resolve;});
+  old.mutate=async()=>({deleted:true}); old.detachSession=async()=>{entered(); await blocked;};
+  const first=manager.mutate('same','delete',{}); await started;
+  await manager.setDraftAttachments('same',[{uri:'file:///fixture.png',path:'/new.png',mime:'image/png'}]);
+  release(); await first; expect(manager.getState().chats.same.sessionUnavailable).toBe(true); expect(manager.getState().chats.same.draftAttachments).toHaveLength(1);
+  await manager.setDraftAttachments('same',[]);
+  blocked=new Promise<void>(resolve=>{release=resolve;}); started=new Promise<void>(resolve=>{entered=resolve;});
+  const second=manager.mutate('other','delete',{}); await started;
+  vi.stubGlobal('fetch',async()=>({ok:true}));
+  try { await manager.configure({baseUrl:'https://new.example',token:'fixture'}); await manager.setDraftAttachments('other',[{uri:'file:///fixture.png',path:'/other.png',mime:'image/png'}]); release(); await second; expect(manager.getState().chats.other.draftAttachments).toHaveLength(1); } finally { release(); manager.dispose(); vi.unstubAllGlobals(); }
+});
+
+it('applies queued edit only while captured draft and endpoint remain unchanged', async () => {
+  const manager=new AppManager(); await manager.initialize();
+  manager.setDraft('s','original'); const captured=manager.captureDraft('s');
+  manager.setDraft('s','changed'); manager.setDraft('s','original'); manager.replaceCapturedDraft('s',captured,'queued');
+  expect(manager.getState().drafts.s).toBe('original');
+  manager.replaceCapturedDraft('s',manager.captureDraft('s'),'queued'); expect(manager.getState().drafts.s).toBe('queued'); manager.dispose();
+});
+
+it('secure cancellation and late actions belong only to their request', async () => {
+  mocks.secure.set('hermes.baseUrl','https://old.example'); mocks.secure.set('hermes.token','fixture');
+  const manager=new AppManager(); await manager.initialize(); await flush(); const client=mocks.clients[0];
+  const first=client.opts.requestSecret('sudo',{},new AbortController().signal); const firstRejected=expect(first).rejects.toThrow('Superseded'); const old=manager.getState().secureRequest!;
+  const second=client.opts.requestSecret('secret',{},new AbortController().signal); await firstRejected; const current=manager.getState().secureRequest!;
+  manager.answerSecret(old,'stale'); manager.cancelSecret(old); expect(manager.getState().secureRequest).toBe(current);
+  const secondRejected=expect(second).rejects.toThrow('Request cancelled'); manager.cancelSecret(current); await secondRejected; expect(manager.getState().secureRequest).toBeNull(); manager.dispose();
+});
+
+it('clears only its latest recovered draft warning', async () => {
+  const manager=new AppManager(); await manager.initialize(); mocks.fail=true; manager.setDraft('s','first'); await flush();
+  expect(manager.getState().error).toBe('Could not save your draft.'); mocks.fail=false; manager.setDraft('s','second'); await flush(); expect(manager.getState().error).toBeNull(); manager.dispose();
+});
+
+it('does not let an earlier successful checkpoint clear a newer failure or an unrelated error', async () => {
+  const manager=new AppManager(); await manager.initialize();
+  let release!:()=>void, entered!:()=>void; const blocked=new Promise<void>(resolve=>{release=resolve;}); const started=new Promise<void>(resolve=>{entered=resolve;});
+  let count=0; mocks.writeHook=async()=>{ if (++count === 1) { entered(); await blocked; } else throw Error('disk full'); };
+  manager.setDraft('s','first'); await started; manager.setDraft('s','second'); release(); await flush();
+  expect(manager.getState().error).toBe('Could not save your draft.');
+  mocks.writeHook=null; (manager as any).update({error:'Unrelated connection error'}); manager.setDraft('s','third'); await flush();
+  expect(manager.getState().error).toBe('Unrelated connection error'); manager.dispose();
+});
+
+it('does not apply a captured queued edit after an endpoint change', async () => {
+  mocks.rows=new Map(); mocks.secure.set('hermes.baseUrl','https://old.example'); mocks.secure.set('hermes.token','fixture');
+  const manager=new AppManager(); await manager.initialize(); await flush();
+  const captured=manager.captureDraft('s');
+  vi.stubGlobal('fetch',async()=>({ok:true}));
+  try {
+    await manager.configure({baseUrl:'https://new.example',token:'fixture'});
+    manager.replaceCapturedDraft('s',captured,'queued');
+    expect(manager.getState().drafts.s ?? '').toBe('');
+  } finally { manager.dispose(); vi.unstubAllGlobals(); }
+});
+
+it('keeps a replacement secret request alive after cancellation and an old abort', async () => {
+  mocks.secure.set('hermes.baseUrl','https://old.example'); mocks.secure.set('hermes.token','fixture');
+  const manager=new AppManager(); await manager.initialize(); await flush(); const client=mocks.clients[0];
+  const oldAbort=new AbortController(); const oldPromise=client.opts.requestSecret('sudo',{},oldAbort.signal);
+  const oldRejected=expect(oldPromise).rejects.toThrow('Request cancelled'); const old=manager.getState().secureRequest!;
+  manager.cancelSecret(old); await oldRejected;
+  const nextPromise=client.opts.requestSecret('secret',{},new AbortController().signal); const next=manager.getState().secureRequest!;
+  oldAbort.abort(); manager.answerSecret(old,'stale'); manager.cancelSecret(old);
+  expect(manager.getState().secureRequest).toBe(next);
+  manager.answerSecret(next,'new answer'); await expect(nextPromise).resolves.toBe('new answer'); manager.dispose();
+});
+
+it('clears a draft warning when a durable send checkpoints the outbox', async () => {
+  const manager=new AppManager(); await manager.initialize();
+  mocks.fail=true; manager.setDraft('s','send this'); await flush();
+  expect(manager.getState().error).toBe('Could not save your draft.');
+  mocks.fail=false; await manager.send('s');
+  expect(manager.getState().error).toBeNull();
+  expect(cachePayload(mocks.saved).outbox[0].text).toBe('send this'); manager.dispose();
+});
+
+it('clears a draft warning after a full image checkpoint covers it', async () => {
+  const manager=new AppManager(); await manager.initialize();
+  mocks.fail=true; manager.setDraft('s','keep this'); await flush();
+  expect(manager.getState().error).toBe('Could not save your draft.');
+  mocks.fail=false; await manager.setDraftAttachments('s',[{uri:'file:///fixture.png',path:'/new.png',mime:'image/png'}]);
+  expect(manager.getState().error).toBeNull(); expect(cachePayload(mocks.saved).drafts.s).toBe('keep this'); manager.dispose();
+});
+
+it('does not let an older full checkpoint clear a newer failed draft', async () => {
+  const manager=new AppManager(); await manager.initialize();
+  mocks.fail=true; manager.setDraft('s','first'); await flush();
+  let release!:()=>void, entered!:()=>void; const blocked=new Promise<void>(resolve=>{release=resolve;}); const started=new Promise<void>(resolve=>{entered=resolve;});
+  let count=0; mocks.fail=false; mocks.writeHook=async()=>{if (++count === 1) {entered(); await blocked;} else throw Error('disk full');};
+  const full=manager.setDraftAttachments('s',[]); await started; manager.setDraft('s','newer'); release(); await full; await flush();
+  expect(manager.getState().error).toBe('Could not save your draft.');
+  mocks.writeHook=null; (manager as any).update({error:'Unrelated connection error'}); await manager.setDraftAttachments('s',[]);
+  expect(manager.getState().error).toBe('Unrelated connection error'); manager.dispose();
 });

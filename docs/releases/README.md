@@ -1,9 +1,10 @@
 # Release records
 
-Last recorded installed release: [0.3.0 (7)](0.3.0.md), 17 November 2026.
+Last recorded installed release: [0.3.1 (8)](0.3.1.md), 17 November 2026.
 
 | Version | Android code | Main change | Recorded installation |
 | --- | --- | --- | --- |
+| [0.3.1](0.3.1.md) | 8 | Audit repairs and narrow simplification | Success |
 | 0.3.0 | 7 | Everyday chat tools, Android sharing, filters and model controls | Success |
 | 0.2.4 | 6 | Microphone feedback and hands-free endpoint repair | Success |
 | 0.2.3 | 5 | Rich notification previews | Success; owner confirmed improved alert |

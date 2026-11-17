@@ -1,17 +1,11 @@
-import { gatewayOrigin, hermesHome } from '../config.mjs';
+import { gatewayOrigin, readDeploymentToken } from '../config.mjs';
 // Explicit opt-in integration: real gateway, only disposable sessions owned by this test.
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { writeFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { CanonicalClient } from '@hermes-mobile/protocol';
 
 it('recovers healthy sessions after another is deleted and reads terminal receipts', async () => {
-  const env = readFileSync(join(hermesHome(), '.env'), 'utf8');
-  const entries = [...env.matchAll(/^\s*(?:export\s+)?HERMES_DASHBOARD_SESSION_TOKEN\s*=\s*(.*)$/gm)];
-  if (entries.length !== 1) throw new Error('Local credential configuration unavailable');
-  let token = entries[0][1].trim();
-  if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) token = token.slice(1, -1);
-  if (!token || token.startsWith('file:')) throw new Error('Local credential configuration unavailable');
+  const token = readDeploymentToken();
   const unavailable: Array<{id:string; reason:string; code:number}> = [];
   const client = new CanonicalClient({ baseUrl:gatewayOrigin(), getToken:async () => token, persistSubmission:async () => {}, acknowledgeSubmission:async () => {}, onSessionUnavailable:(id, detail) => unavailable.push({id,...detail}) });
   const cleanup = new CanonicalClient({ baseUrl:gatewayOrigin(), getToken:async () => token, persistSubmission:async () => {}, acknowledgeSubmission:async () => {} });

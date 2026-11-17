@@ -13,13 +13,13 @@ import { ChatScreen } from "./src/screens/ChatScreen";
 import { IncomingShareSheet } from "./src/sharing/IncomingShareSheet";
 export default function App() {
   const state = useAppStore(s => ({credentialsConfigured:s.credentialsConfigured,activeSessionId:s.activeSessionId,secureRequest:s.secureRequest}));
-  const [secure, setSecure] = useState("");
+  const [secure, setSecure] = useState<{request: typeof state.secureRequest; value: string}>({request:null, value:""});
   const [setup, setSetup] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   useEffect(() => { startConnectionGrace(); }, []);
   useEffect(() => setupNotifications(), []);
   useEffect(() => {
-    setSecure("");
+    setSecure(current => current.request === state.secureRequest ? current : {request:state.secureRequest, value:""});
   }, [state.secureRequest]);
   useEffect(() => {
     void appManager
@@ -56,6 +56,7 @@ export default function App() {
           visible={!!state.secureRequest}
           transparent
           animationType="slide"
+          onRequestClose={() => { if (state.secureRequest) appManager.cancelSecret(state.secureRequest); }}
         >
           <View
             style={{
@@ -77,15 +78,15 @@ export default function App() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 secureTextEntry
-                value={secure}
-                onChangeText={setSecure}
+                value={secure.request === state.secureRequest ? secure.value : ""}
+                onChangeText={(value) => { if (state.secureRequest && appManager.getState().secureRequest === state.secureRequest) setSecure({request:state.secureRequest, value}); }}
                 style={ui.input}
               />
+              <Button label="Cancel" onPress={() => { if (state.secureRequest) appManager.cancelSecret(state.secureRequest); }} />
               <Button
                 label="Submit"
                 onPress={() => {
-                  appManager.answerSecret(secure);
-                  setSecure("");
+                  if (state.secureRequest) appManager.answerSecret(state.secureRequest, secure.request === state.secureRequest ? secure.value : "");
                 }}
               />
             </Card>

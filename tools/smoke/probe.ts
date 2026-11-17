@@ -1,5 +1,5 @@
-import { gatewayOrigin, hermesHome } from '../config.mjs';
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { gatewayOrigin, readDeploymentToken } from '../config.mjs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
@@ -10,12 +10,7 @@ import { RpcError, mutateWithRetry, latestVersion, reconstructDeltas, armDisconn
 // It never logs the session token, socket ticket, session titles or messages.
 type Json = any;
 const base = gatewayOrigin();
-const path = join(hermesHome(), '.env');
-const entries = [...readFileSync(path, 'utf8').matchAll(/^\s*(?:export\s+)?HERMES_DASHBOARD_SESSION_TOKEN\s*=\s*(.*)$/gm)];
-if (entries.length !== 1) throw new Error('Expected exactly one deployment token entry');
-let token = entries[0][1].trim();
-if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) token = token.slice(1, -1);
-if (!token || token.startsWith('file:')) throw new Error('Expected a literal deployment token');
+const token = readDeploymentToken();
 const secrets = [token];
 function shape(value: Json, depth = 0): Json {
   if (value === null) return 'null';

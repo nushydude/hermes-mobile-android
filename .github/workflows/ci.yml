@@ -32,4 +32,3 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test:host
-      - run: node --test app/plugins/withIncomingShares.test.cjs

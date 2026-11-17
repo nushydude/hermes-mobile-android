@@ -4,8 +4,14 @@ Recorded 17 November 2026. This is a documentation snapshot, not a live service-
 
 ## Release
 
-Last recorded successful installation: **0.3.0 (7)** on the owner's Pixel using `adb install -r`
-after Play Protect. See the [release record](releases/0.3.0.md). Previous installed build: 0.2.4 (6).
+Last recorded successful installation: **[0.3.1 (8)](releases/0.3.1.md)** on the owner's Pixel.
+`adb install -r` returned Success and package metadata confirmed version/code. Previous installed
+build: 0.3.0 (7). No app launch or phone behavior tests were performed during this installation.
+
+The installed update includes all eight
+[source-audit repairs](audits/2026-11-17-remediation.md), narrow duplication removal and independent
+Sol/xhigh review. Main's 328 offline checks, types and package integrity passed. Native behavior
+remains owner acceptance.
 
 ## Implemented
 

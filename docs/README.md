@@ -1,6 +1,6 @@
 # Documentation map
 
-Updated 17 November 2026 (Australia/Sydney). Last recorded installation: **0.3.0 (7)**.
+Updated 17 November 2026 (Australia/Sydney). Last recorded installation: **0.3.1 (8)**.
 
 ## Read first
 
@@ -20,6 +20,9 @@ Updated 17 November 2026 (Australia/Sydney). Last recorded installation: **0.3.0
 - [PC hook contract](../tools/notifications/HOOK_CONTRACT.md).
 
 ## Releases and historical evidence
+
+- [Source audit, 17 November 2026](audits/2026-11-17-source-audit.md): independent Sol/xhigh review, reproduced defects and prioritized simplifications.
+- [Audit remediation](audits/2026-11-17-remediation.md): eight repairs, narrow cleanup, review and verification for 0.3.1.
 
 - [Changelog](../CHANGELOG.md) and [release index](releases/README.md).
 - [0.3.0 release record](releases/0.3.0.md): artifact, checks and remaining phone acceptance.

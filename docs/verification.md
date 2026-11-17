@@ -10,11 +10,11 @@ From the repository root:
 ```powershell
 npm run typecheck
 npm run test:host
-node --test app/plugins/withIncomingShares.test.cjs
 ```
 
 Host tests cover transport/state, helpers, voice/resource ownership, notification adapters and
-PC hook logic with fixtures. They do not contact the gateway or drive the phone.
+PC hook logic with fixtures. The aggregate also includes incoming-share manifest plugin checks
+and smoke-fixture ownership tests. It does not contact the gateway or drive the phone.
 
 Contract drift is a separate local check: `npm run check:contract` reads an external Hermes
 source checkout. Set `HERMES_SOURCE` if it is not in the default location; a missing checkout is
@@ -30,7 +30,7 @@ try { .\gradlew.bat :hermes-sharing:testDebugUnitTest --console=plain } finally 
 ```
 
 Prebuild/autolinking must exist first. JVM results do not prove Android intent delivery or grant
-lifetime. Latest release evidence combines a full baseline with affected-suite reruns: **294 host
+lifetime. Historical 0.3.0 evidence combines a full baseline with affected-suite reruns: **294 host
 checks + 2 plugin checks + 5 JVM checks = 301 distinct checks**, not 301 physical phone tests.
 
 ## Explicit live gateway checks

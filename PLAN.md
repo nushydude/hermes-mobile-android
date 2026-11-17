@@ -624,3 +624,20 @@ requested/effective values and explicitly handle deferred changes. No prompt/LLM
 Require workspace types, meaningful host/native tests, independent source review and repaired
 findings, release signing/manifest/JS/icon-font/token checks. The owner retains native phone tests
 for incoming intents, file grants, text selection, keyboard, search jumps, drafts and handoff.
+
+## 20. Owner-authorized audit repairs and narrow simplification (17 November 2026)
+
+Repair the six P2 and two P3 findings in the [source audit](docs/audits/2026-11-17-source-audit.md):
+endpoint-safe deletion cleanup, queued-edit draft preservation, coherent running refresh,
+post-resume failure ownership, local secure-input cancellation, uniquely owned smoke fixtures,
+completed stream-buffer retention and operation-owned storage-warning recovery.
+
+Then consolidate duplicated preference persistence, host credential parsing and secure UUID
+generation, clarify caller version metadata and make the offline aggregate complete. Keep the
+changes small and preserve existing behavior outside the explicit repairs. Broad UI/state/voice
+rewrites, dependency migrations and signing changes are not part of this batch.
+
+Require focused regression tests, applicable offline/type/contract checks, independent
+GPT-6.1 Sol review at extra-high effort, remediation of review findings, and a verified final APK.
+Target version 0.3.1/build 8. Building does not authorize installation or phone behavior tests.
+Gateway restart, credential/configuration, Tailscale and messaging rules remain unchanged.

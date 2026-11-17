@@ -1,4 +1,5 @@
-import { gatewayOrigin, hermesHome } from '../config.mjs';
+import { createOwnedFixture, archiveOwnedFixture } from './fixture.mjs';
+import { gatewayOrigin, readDeploymentToken } from '../config.mjs';
 // Bounded synthetic timings only. Never prints credentials, chat content or raw errors.
 import { readFileSync, mkdirSync, writeFileSync, openSync, writeSync, fsyncSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
@@ -27,12 +28,7 @@ async function audio(path, body, token) {
   return result;
 }
 try {
-  const env = readFileSync(join(hermesHome(), '.env'), 'utf8');
-  const entries = [...env.matchAll(/^\s*(?:export\s+)?HERMES_DASHBOARD_SESSION_TOKEN\s*=\s*(.*)$/gm)];
-  if (entries.length !== 1) throw new Error('Credential');
-  let token = entries[0][1].trim();
-  if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) token = token.slice(1, -1);
-  if (!token || token.startsWith('file:')) throw new Error('Credential');
+  const token = readDeploymentToken();
   const fixture = readFileSync('.artifacts/audio-smoke/fixture.wav');
   const stt = await timed('transcription', () => audio('transcribe', { data_url: `data:audio/wav;base64,${fixture.toString('base64')}`, mime_type: 'audio/wav' }, token));
   evidence.transcript_characters = typeof stt.transcript === 'string' ? stt.transcript.length : 0;
@@ -44,9 +40,7 @@ try {
     onEvent: event => { if (events.length < 5000) events.push({ event, elapsed: submittedAt ? Math.round(now() - submittedAt) : null }); },
   });
   await timed('connect', () => client.connect());
-  const created = await timed('create', () => client.createSession({ title: 'Hermes Mobile synthetic latency probe' }));
-  session = created.session_id;
-  if (typeof session !== 'string' || !session) throw new Error('Session');
+  session = await timed('create', () => createOwnedFixture(client, 'Hermes Mobile synthetic latency probe'));
   evidence.cleanup = 'archive_pending';
   writeFileSync(join(directory, 'latency-session.json'), JSON.stringify({ session_id: session }));
   const before = metadata(await timed('resume', () => client.openSession(session)));
@@ -82,7 +76,7 @@ try {
 } catch { evidence.result = 'failed'; evidence.failed_stage = stage; process.exitCode = 1; }
 finally {
   if (session && client) {
-    try { await client.mutate(session, 'archive', { archived: true }); evidence.cleanup = 'archived'; }
+    try { await archiveOwnedFixture(client, session); evidence.cleanup = 'archived'; }
     catch { evidence.cleanup = 'archive_failed'; evidence.result = 'failed'; process.exitCode = 1; }
   }
   client?.close(); evidence.finished_at = new Date().toISOString(); save();

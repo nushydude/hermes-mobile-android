@@ -1,16 +1,10 @@
-import { gatewayOrigin, hermesHome } from '../config.mjs';
+import { gatewayOrigin, readDeploymentToken } from '../config.mjs';
 // Read-only real-gateway catalog check. Never writes credentials or raw RPC replies.
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { writeFileSync } from 'node:fs';
 writeFileSync(new URL('../../.artifacts/protocol-runtime/package.json', import.meta.url), '{"type":"module"}\n');
 const { CanonicalClient } = await import('../../.artifacts/protocol-runtime/index.js');
 const { mobileModelChoices } = await import('../../app/src/components/selections.ts');
-const env = readFileSync(join(hermesHome(), '.env'), 'utf8');
-const entries = [...env.matchAll(/^\s*(?:export\s+)?HERMES_DASHBOARD_SESSION_TOKEN\s*=\s*(.*)$/gm)];
-if (entries.length !== 1) throw new Error('Expected exactly one deployment token entry');
-let token = entries[0][1].trim();
-if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) token = token.slice(1, -1);
-if (!token || token.startsWith('file:')) throw new Error('Expected a literal deployment token');
+const token = readDeploymentToken();
 const client = new CanonicalClient({baseUrl:gatewayOrigin(), getToken:async()=>token,
   persistSubmission:async()=>{throw new Error('Read-only probe');}, acknowledgeSubmission:async()=>{}});
 const shape = result => ({provider:result.provider, model:result.model, providers:(result.providers ?? []).map(p=>({slug:p.slug, model_count:p.models?.length ?? 0, source:p.source, auth_type:p.auth_type, authenticated:p.authenticated, is_user_defined:p.is_user_defined, is_current:p.is_current}))});

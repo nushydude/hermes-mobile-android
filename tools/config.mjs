@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -23,4 +24,21 @@ export function subscriptionUrl(value, origin) {
     if (url.protocol !== 'ntfy:' || url.username || url.password || url.search || url.hash || subscriptionOrigin !== httpsOrigin(origin, 'HERMES_MOBILE_NTFY_URL')) throw invalid();
     return url.toString();
   } catch { throw invalid(); }
+}
+
+// Parse only literal deployment-token assignments; never include their values in errors.
+export function tokenEntries(text) {
+  return [...text.matchAll(/^[^\S\r\n]*(?:export[^\S\r\n]+)?HERMES_DASHBOARD_SESSION_TOKEN[^\S\r\n]*=[^\S\r\n]*(.*)$/gm)].map(match => match[1]);
+}
+export function parseDeploymentToken(text) {
+  const entries = tokenEntries(text);
+  if (entries.length !== 1) throw new Error('Credential configuration unavailable');
+  let token = entries[0].trim();
+  if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) token = token.slice(1, -1);
+  if (!token || token.startsWith('file:')) throw new Error('Credential configuration unavailable');
+  return token;
+}
+export function readDeploymentToken() {
+  try { return parseDeploymentToken(readFileSync(join(hermesHome(), '.env'), 'utf8')); }
+  catch { throw new Error('Credential configuration unavailable'); }
 }

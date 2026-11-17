@@ -1038,7 +1038,12 @@ export function ChatScreen() {
                   <Text style={{ color: colors.warning }}>Discard unknown</Text>
                 </Pressable>
               )}
-              {q.status === "queued" && <><Pressable onPress={() => appManager.setDraft(id, text(q))}>
+              {q.status === "queued" && <><Pressable onPress={() => {
+                const captured = appManager.captureDraft(id), replacement = text(q);
+                const apply = () => appManager.replaceCapturedDraft(id, captured, replacement);
+                if (captured.text.length && captured.text !== replacement) Alert.alert('Replace your draft?', 'Opening this queued message will replace your current draft.', [{text:'Cancel', style:'cancel'}, {text:'Replace draft', onPress:apply}]);
+                else apply();
+              }}>
                 <Text style={{ color: colors.accent }}>Edit</Text>
               </Pressable>
               <Pressable

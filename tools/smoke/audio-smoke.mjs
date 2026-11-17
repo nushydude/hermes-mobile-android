@@ -1,4 +1,4 @@
-import { gatewayOrigin, hermesHome } from '../config.mjs';
+import { gatewayOrigin, readDeploymentToken } from '../config.mjs';
 import { mkdirSync, readFileSync, writeFileSync, openSync, writeSync, fsyncSync, closeSync } from 'node:fs';
 import { randomUUID, createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -18,13 +18,7 @@ const evidence={version:1, started_at:new Date().toISOString(), result:'incomple
 let stage='startup', ownedSession=null; const clients=[];
 class CheckFailure extends Error { constructor(code) { super('Check failed'); this.code=code; } }
 function check(ok,name) { if (!ok) throw new CheckFailure(name); }
-function tokenFromDisk() {
-  const text=readFileSync(join(hermesHome(),'.env'),'utf8');
-  const entries=[...text.matchAll(/^\s*(?:export\s+)?HERMES_DASHBOARD_SESSION_TOKEN\s*=\s*(.*)$/gm)];
-  check(entries.length===1,'credential'); let token=entries[0][1].trim();
-  if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) token=token.slice(1,-1);
-  check(token && !token.startsWith('file:'),'credential'); return token;
-}
+function tokenFromDisk() { return readDeploymentToken(); }
 function durableFile(file,value) { const fd=openSync(file,'wx',0o600); try {writeSync(fd,JSON.stringify(value));fsyncSync(fd);} finally {closeSync(fd);} }
 function checkpoint() { writeFileSync(join(ARTIFACT,RESULT_FILE),JSON.stringify(evidence,null,2),{mode:0o600}); }
 async function timed(name,fn) { stage=name; const start=performance.now(); try{return await fn();}finally{evidence.timings_ms[name]=Math.round(performance.now()-start);checkpoint();} }

@@ -3,7 +3,17 @@
 User-facing history recorded 17 November 2026. Version numbers identify the app, not the root
 npm workspace. Artifact identity and acceptance are in [release records](docs/releases/README.md).
 
-## Unreleased
+## 0.3.1 (8) - 17 November 2026
+
+- Preserve draft images through delayed deletion cleanup and protect composer text when opening queued edits.
+- Keep running replies intact during authority refresh and retire failed subscription acquisitions safely.
+- Add request-owned Cancel/Android-back handling for secure input.
+- Release completed stream buffers and clear recovered storage warnings without hiding unrelated errors.
+- Give smoke probes unique fixture ownership, centralize credential parsing, and include plugin checks in the offline aggregate.
+- Share preference persistence and secure UUID generation; advertise the actual app version to the gateway.
+- Build/review and artifact acceptance are recorded in the release note; installation remains separate.
+
+## Public repository preparation - 17 November 2026
 
 - Public source repository, README, MIT license, contribution/security guidance and retained upstream notices.
 - Architecture, setup, verification, release records and retrospective ADRs.

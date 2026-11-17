@@ -1,7 +1,6 @@
-import { gatewayOrigin, hermesHome } from '../config.mjs';
+import { gatewayOrigin, readDeploymentToken } from '../config.mjs';
 // Explicit live integration check. Native adapters are memory mocks; transport is real.
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { writeFileSync } from 'node:fs';
 import { afterAll, expect, it, vi } from 'vitest';
 vi.mock('../../app/src/notifications', () => ({notifyEvent:async()=>{},reconcileSnapshot:async()=>{}}));
 
@@ -21,12 +20,7 @@ const until = async (predicate: () => boolean, ms = 90_000) => {
 afterAll(() => manager.dispose());
 
 it('renames an own session and returns the committed title in inventory', async () => {
-  const env = readFileSync(join(hermesHome(), '.env'), 'utf8');
-  const entries = [...env.matchAll(/^\s*(?:export\s+)?HERMES_DASHBOARD_SESSION_TOKEN\s*=\s*(.*)$/gm)];
-  if (entries.length !== 1) throw new Error('Local credential configuration unavailable');
-  let token = entries[0][1].trim();
-  if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) token = token.slice(1, -1);
-  if (!token || token.startsWith('file:')) throw new Error('Local credential configuration unavailable');
+  const token = readDeploymentToken();
   try { await manager.configure({ baseUrl: gatewayOrigin(), token }); }
   catch { throw new Error('Live gateway configuration failed (credentials redacted)'); }
 

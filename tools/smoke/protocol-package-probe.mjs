@@ -1,16 +1,10 @@
-import { gatewayOrigin, hermesHome } from '../config.mjs';
+import { gatewayOrigin, readDeploymentToken } from '../config.mjs';
 // Read-only acceptance check for the compiled protocol package. No app secrets.
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { writeFileSync } from 'node:fs';
 writeFileSync(new URL('../../.artifacts/protocol-runtime/package.json', import.meta.url), '{"type":"module"}\n');
 const { CanonicalClient } = await import('../../.artifacts/protocol-runtime/index.js');
 
-const env = readFileSync(join(hermesHome(), '.env'), 'utf8');
-const entries = [...env.matchAll(/^\s*(?:export\s+)?HERMES_DASHBOARD_SESSION_TOKEN\s*=\s*(.*)$/gm)];
-if (entries.length !== 1) throw new Error('Expected exactly one deployment token entry');
-let token = entries[0][1].trim();
-if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) token = token.slice(1, -1);
-if (!token || token.startsWith('file:')) throw new Error('Expected a literal deployment token');
+const token = readDeploymentToken();
 const client = new CanonicalClient({
   baseUrl: gatewayOrigin(),
   getToken: async () => token,

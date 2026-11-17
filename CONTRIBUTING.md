@@ -16,7 +16,6 @@ Use Node.js 24 and Python 3. From the repository root:
 npm ci
 npm run typecheck
 npm run test:host
-node --test app/plugins/withIncomingShares.test.cjs
 ```
 
 These checks do not contact a gateway. Android native checks and APK build

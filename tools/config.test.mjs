@@ -31,3 +31,15 @@ test('subscription URLs match normalized HTTPS authorities and reject unsafe inp
     assert.throws(() => subscriptionUrl(value, 'https://host.ts.net'), error => error.message === 'Invalid private subscription configuration');
   }
 });
+
+test('deployment token parser handles synthetic assignments without exposing values', async () => {
+  const { parseDeploymentToken, tokenEntries } = await import('./config.mjs');
+  const key = 'HERMES_DASHBOARD_SESSION_TOKEN';
+  assert.equal(parseDeploymentToken(`export ${key} = "synthetic token"\n`), 'synthetic token');
+  assert.equal(parseDeploymentToken(`${key}='synthetic'`), 'synthetic');
+  assert.equal(parseDeploymentToken(`${key}=unquoted # literal`), 'unquoted # literal');
+  assert.equal(tokenEntries(`${key}=\n${key}=synthetic`).length, 2);
+  for (const text of ['', `${key}=`, `${key}='file:synthetic'`, `${key}=synthetic\n${key}=other`]) {
+    assert.throws(() => parseDeploymentToken(text), error => error.message === 'Credential configuration unavailable');
+  }
+});

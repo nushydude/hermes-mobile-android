@@ -1,26 +1,18 @@
-import { gatewayOrigin, hermesHome } from '../config.mjs';
+import { createOwnedFixture, archiveOwnedFixture } from './fixture.mjs';
+import { gatewayOrigin, readDeploymentToken } from '../config.mjs';
 // Owned idle fixture only: no prompt, provider call, global config or raw transport output.
-import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
+import {writeFileSync,mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 const directory='.artifacts/usability-batch';mkdirSync(directory,{recursive:true});
 const evidence={result:'incomplete',checks:[],cleanup:'not_needed'};
 let client,session,stage='credentials';
 const safe=v=>typeof v==='string' && /^[\w./:+-]{0,120}$/.test(v)?v:null;
 try {
-  const env=readFileSync(join(hermesHome(),'.env'),'utf8');
-  const entries=[...env.matchAll(/^\s*(?:export\s+)?HERMES_DASHBOARD_SESSION_TOKEN\s*=\s*(.*)$/gm)];
-  if(entries.length!==1)throw Error();let token=entries[0][1].trim();
-  if((token.startsWith('"')&&token.endsWith('"'))||(token.startsWith("'")&&token.endsWith("'")))token=token.slice(1,-1);
-  if(!token||token.startsWith('file:'))throw Error();
+  const token = readDeploymentToken();
   const {CanonicalClient}=await import('../../.artifacts/protocol-runtime/index.js');
   client=new CanonicalClient({baseUrl:gatewayOrigin(),getToken:async()=>token,persistSubmission:async()=>{throw Error();},acknowledgeSubmission:async()=>{}});
   stage='connect';await client.connect();
-  // Recover the empty fixture from an interrupted earlier run of this exact script.
-  for(const row of (await client.request('session.list',{title:'Hermes Mobile reasoning picker protocol check'})).sessions ?? []) {
-    const id=row.id || row.session_id;
-    if(id){await client.openSession(id);await client.mutate(id,'archive',{archived:true});}
-  }
-  stage='create';session=(await client.createSession({title:'Hermes Mobile reasoning picker protocol check'})).session_id;
+  stage='create';session=await createOwnedFixture(client, 'Hermes Mobile reasoning picker protocol check');
   writeFileSync(join(directory,'reasoning-fixture.json'),JSON.stringify({session_id:session}));
   evidence.cleanup='pending';
   await client.openSession(session);
@@ -40,6 +32,6 @@ try {
   evidence.result='passed';
 }catch{evidence.result='failed';evidence.failed_stage=stage;process.exitCode=1;}
 finally{
-  if(session&&client)try{await client.mutate(session,'archive',{archived:true});evidence.cleanup='archived';}catch{evidence.cleanup='failed';evidence.result='failed';process.exitCode=1;}
+  if(session&&client)try{await archiveOwnedFixture(client,session);evidence.cleanup='archived';}catch{evidence.cleanup='failed';evidence.result='failed';process.exitCode=1;}
   client?.close();writeFileSync(join(directory,'reasoning-smoke.json'),JSON.stringify(evidence,null,2));console.log(JSON.stringify(evidence));
 }
