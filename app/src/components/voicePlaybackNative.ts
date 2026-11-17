@@ -1,6 +1,7 @@
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { File, Paths } from 'expo-file-system';
 import type { PlaybackAdapter } from './voicePlayback';
+import { voiceAudioMode } from './voiceAudioMode';
 
 type Synthesize=(text:string,signal:AbortSignal)=>Promise<{mime:string;base64:string}>;
 export function nativeVoicePlayback(synthesize:Synthesize, valid:()=>boolean, onStarted?:()=>void):PlaybackAdapter {
@@ -20,7 +21,7 @@ export function nativeVoicePlayback(synthesize:Synthesize, valid:()=>boolean, on
       const ext=audio.mime.includes('wav')?'wav':audio.mime.includes('ogg')?'ogg':audio.mime.includes('webm')?'webm':audio.mime.includes('mp4')?'m4a':'mp3';
       file=new File(Paths.cache,`hermes-voice-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`);file.create();
       await file.write(audio.base64,{encoding:'base64'});check();
-      await setAudioModeAsync({allowsRecording:false,shouldPlayInBackground:false});check();
+      await setAudioModeAsync(voiceAudioMode(false));check();
       player=createAudioPlayer(file.uri);const current=player;
       await new Promise<void>((resolve,reject)=>{
         let settled=false, sub:{remove:()=>void}|null=null;

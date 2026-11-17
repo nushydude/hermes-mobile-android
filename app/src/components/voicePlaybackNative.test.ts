@@ -17,11 +17,31 @@ vi.mock('expo-audio',()=>({
  }),
 }));
 import { nativeVoicePlayback } from './voicePlaybackNative';
+import { setAudioModeAsync } from 'expo-audio';
+import { voiceAudioMode } from './voiceAudioMode';
 const flush=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
 function deferred<T>(){let resolve!:(value:T)=>void;let reject!:(error:Error)=>void;const promise=new Promise<T>((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
 const audio={mime:'audio/mpeg',base64:'YWJj'};
-beforeEach(()=>{native.files=[];native.players=[];native.write=async()=>{};native.loaded=false;native.synchronous=false;native.throwPause=false;native.throwAdd=false;native.throwRemove=false;vi.useFakeTimers();});
+beforeEach(()=>{vi.mocked(setAudioModeAsync).mockReset().mockResolvedValue(undefined);native.files=[];native.players=[];native.write=async()=>{};native.loaded=false;native.synchronous=false;native.throwPause=false;native.throwAdd=false;native.throwRemove=false;vi.useFakeTimers();});
 afterEach(()=>vi.useRealTimers());
+describe('foreground voice audio mode',()=>{
+ it('requests transient non-mixing playback focus on the real acquire path',async()=>{
+  native.loaded=true;const handle=await nativeVoicePlayback(async()=>audio,()=>true).acquire('text',new AbortController().signal);
+  expect(setAudioModeAsync).toHaveBeenCalledWith({allowsRecording:false,shouldPlayInBackground:false,interruptionMode:'doNotMix'});handle.release();
+  expect(voiceAudioMode(true)).toEqual({allowsRecording:true,shouldPlayInBackground:false,interruptionMode:'doNotMix'});
+ });
+ it('does not create a player when cancelled while setting the audio mode',async()=>{
+  const pending=deferred<void>();vi.mocked(setAudioModeAsync).mockImplementation(()=>pending.promise);
+  const abort=new AbortController(),work=nativeVoicePlayback(async()=>audio,()=>true).acquire('text',abort.signal);await flush();
+  expect(setAudioModeAsync).toHaveBeenCalled();abort.abort();pending.resolve();await expect(work).rejects.toThrow();
+  expect(native.players).toHaveLength(0);expect(native.files[0].deleted).toBe(1);
+ });
+ it('cleans the file and does not create a player if setting the audio mode fails',async()=>{
+  vi.mocked(setAudioModeAsync).mockRejectedValueOnce(new Error('mode failed'));
+  await expect(nativeVoicePlayback(async()=>audio,()=>true).acquire('text',new AbortController().signal)).rejects.toThrow('mode failed');
+  expect(native.players).toHaveLength(0);expect(native.files[0].deleted).toBe(1);
+ });
+});
 describe('native voice playback resource ownership',()=>{
  it('reports the first playing status once without disrupting playback when diagnostics fail',async()=>{native.loaded=true;const started=vi.fn(()=>{throw new Error('diagnostic failure');});const handle=await nativeVoicePlayback(async()=>audio,()=>true,started).acquire('text',new AbortController().signal);const statuses:any[]=[];const unsubscribe=handle.subscribe(s=>statuses.push(s));const playing={playing:true,currentTime:0,duration:1,isBuffering:false,didJustFinish:false};native.players[0].listener(playing);native.players[0].listener(playing);expect(started).toHaveBeenCalledTimes(1);expect(statuses).toHaveLength(2);unsubscribe();handle.release();});
  it('does not report a retained stale listener after release when another playback has started',async()=>{native.loaded=true;let owner='old';const started:string[]=[];const adapter=nativeVoicePlayback(async()=>audio,()=>true,()=>started.push(owner));const old=await adapter.acquire('old',new AbortController().signal);const unsubscribe=old.subscribe(()=>{});const late=native.players[0].listener;unsubscribe();owner='new';const next=await adapter.acquire('new',new AbortController().signal);next.subscribe(()=>{});const status={playing:true,currentTime:0,duration:1,isBuffering:false,didJustFinish:false};late(status);expect(started).toEqual([]);old.release();late(status);expect(started).toEqual([]);native.players[1].listener(status);expect(started).toEqual(['new']);next.release();});

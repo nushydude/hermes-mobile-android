@@ -51,3 +51,11 @@ Evaluated and deferred: installed upstream lacks the required supported same-ses
 Implemented bounded per-origin/parent task observations, persisted cache with memory fallback, task tray, parent-scoped child transcript reads, specific child stop requests and replay-deduplicated terminal notifications. The tray exposes existing work; it does not dispatch or promise detached execution. Missing unfinished children become Unknown; explicit terminal evidence is retained. See [contracts and limits](conversational-phase4.md).
 
 Independent GPT-6.1 Sol/xhigh review cleared R1 after repairing session-specific refresh fencing, deterministic first-terminal restore ordering and optional-cache initialization failure. Main passed the pre-repair complete380-check aggregate/types/contract; final repaired aggregate and APK evidence are recorded in the release record. No real child inference, phone or background lifecycle acceptance was run. The owned empty-session contract fixture was archived without a prompt.
+
+Phase4 commit: `c6b6bae`.
+
+## Phase 5 — foreground reliability and accessibility
+
+Added accessible disabled states, polite voice phase/error feedback, wrapping voice controls with retained touch targets, and an explicit transient non-mixing playback audio mode shared with capture configuration. Independent GPT-6.1 Sol/xhigh source review cleared the initial candidate with no actionable findings. Main's complete host run includes these changes; the implementor also passed74 focused checks and types. Tests exercise real adapter acquisition, cancellation during mode setup and mode failure cleanup.
+
+The installed SDK player requests focus and may resume after a transient interruption; its recorder does not itself request audio focus. No capture-interruption safety or rendered large-text/TalkBack behavior is claimed from these checks. The [owner acceptance matrix](conversational-phase5-acceptance.md) records device, call, routing, draft, reconnect and task checks still required. No new background microphone/service or theme system was introduced.
