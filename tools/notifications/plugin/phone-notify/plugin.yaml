@@ -1,0 +1,9 @@
+name: phone-notify
+version: 0.1.0
+description: Generic mobile notifications for Hermes turns and human input
+kind: standalone
+provides_hooks:
+  - on_human_input_request
+  - on_human_input_resolved
+  - post_llm_call
+  - on_session_end

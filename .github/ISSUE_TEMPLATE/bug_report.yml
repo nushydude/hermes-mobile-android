@@ -1,0 +1,26 @@
+name: Bug report
+description: Report a reproducible problem
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, QR codes, private addresses or unredacted chats. Report security issues using SECURITY.md.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Versions
+      description: App version/build, Android version/device, Hermes version or commit, build method.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps and expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include only reviewed, redacted evidence.
+    validations:
+      required: true

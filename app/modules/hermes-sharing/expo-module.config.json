@@ -1,0 +1,6 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": ["net.taild39a23.hermesmobile.sharing.HermesSharingModule"]
+  }
+}

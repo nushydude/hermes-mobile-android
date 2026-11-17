@@ -1,0 +1,9 @@
+{
+  "extends": "../../packages/hermes-protocol/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "../../packages/hermes-protocol/src",
+    "outDir": "../../.artifacts/protocol-runtime"
+  },
+  "include": ["../../packages/hermes-protocol/src/**/*.ts"]
+}

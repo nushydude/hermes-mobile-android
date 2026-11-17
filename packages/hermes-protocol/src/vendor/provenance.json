@@ -1,0 +1,13 @@
+{
+  "source": "Hermes Agent apps/shared/src",
+  "sha256": {
+    "gateway-contract.generated.ts": "a9ee23040e2c441b649e9fe985a285a570f2a6567f171198687a92e0af229e61",
+    "gateway-events.ts": "0c44bbb5b2c76a5b355654438d0cb7a77bfe85b592b7fb89d17b3f25d271ed00",
+    "gateway-canonical.ts": "9183d7396514a58367684decb2ff357189deff082f2cc8c038ed6e7c8a8b480f",
+    "gateway-text.ts": "6e4b223e0e5168bdfcb6035c4600f4afab0ffa8c6508e2c0de1292c246911239",
+    "reconnect-backoff.ts": "066a9efab5237e47b0b892ef72ec129485622a45ff8e1b964e278999c8466328",
+    "json-rpc-channel.ts": "4d623fcab8678f427f839d67252d4cdad408d6b6deb1a09c446debfdc0399b19",
+    "json-rpc-gateway.ts": "6271ca1b034e50df8ce88a2e3f0149a66247d0a2b989880bf8a16e6df94eda8e",
+    "LICENSE": "821556e6336796450ab852d375117b48a4887e71d255794fd6318d99982a5ab6"
+  }
+}

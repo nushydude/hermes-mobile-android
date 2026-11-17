@@ -1,0 +1,40 @@
+{
+  "name": "hermes-mobile-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "app",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspace @hermes-mobile/protocol",
+    "test:host": "npm test && npm run test:app && npm run test:preferences && node --test tools/config.test.mjs tools/notifications/show-subscription-qr.test.mjs tools/smoke/core.test.mjs tools/smoke/audio-core.test.mjs && python -m unittest discover -s tools/notifications/tests -p \"test_*.py\"",
+    "sync:contract": "node tools/sync-contract.mjs",
+    "check:contract": "node tools/sync-contract.mjs --check",
+    "smoke": "node tools/smoke/probe.ts --resume-desktop --exercise",
+    "probe:package": "tsc -p tools/smoke/tsconfig.protocol-probe.json && node tools/smoke/protocol-package-probe.mjs",
+    "android:build": "pwsh -NoProfile -File tools/android/build.ps1",
+    "test:app": "vitest run --config app/vitest.state.config.ts && node --test app/src/state/reducer.test.mjs app/src/components/slash.test.mjs app/src/components/images.test.mjs app/src/components/status.test.mjs app/src/components/selections.test.mjs app/src/components/connectionGrace.test.mjs",
+    "probe:app": "vitest run --config tools/smoke/vitest.app-live.config.ts",
+    "android:preview": "pwsh -NoProfile -File tools/android/build.ps1 -Variant Preview",
+    "setup:qr": "pwsh -NoProfile -File tools/show-setup-qr.ps1",
+    "test:preferences": "vitest run --config app/vitest.preferences.config.ts",
+    "probe:rename": "vitest run --config tools/smoke/vitest.rename-live.config.ts",
+    "probe:recovery": "vitest run --config tools/smoke/vitest.recovery-live.config.ts"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "qrcode-terminal": "^0.12.0",
+    "typescript": "~6.0.3",
+    "vitest": "5.1.0"
+  },
+  "overrides": {
+    "react-native-markdown-display": {
+      "markdown-it": "14.3.3"
+    }
+  }
+}

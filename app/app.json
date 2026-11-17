@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "Hermes Mobile",
+    "slug": "hermes-mobile",
+    "version": "0.3.0",
+    "scheme": "hermesmobile",
+    "platforms": [
+      "android"
+    ],
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "net.taild39a23.hermesmobile",
+      "versionCode": 7,
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": true
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": false,
+            "networkInspector": false,
+            "extraProguardRules": "# Room 2.5 (Notifee/WorkManager) constructs generated databases by reflection.\n# Its consumer rule keeps class names but omits constructors under R8 full mode.\n-keep class * extends androidx.room.RoomDatabase {\n    public <init>();\n}"
+          }
+        }
+      ],
+      "expo-secure-store",
+      "./plugins/withSecureTransport",
+      "expo-sqlite",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Hermes Mobile to scan the setup QR code.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose images to send to Hermes.",
+          "cameraPermission": "Take a photo to send to Hermes.",
+          "microphonePermission": "Allow Hermes Mobile to record a message."
+        }
+      ],
+      "./plugins/withWindowsBuildPaths",
+      "./plugins/withNotifications",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow Hermes Mobile to record a message.",
+          "recordAudioAndroid": true,
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      "./plugins/withIncomingShares"
+    ]
+  }
+}

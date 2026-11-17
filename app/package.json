@@ -1,0 +1,48 @@
+{
+  "name": "@hermes-mobile/app",
+  "version": "0.3.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
+    "@hermes-mobile/protocol": "0.1.0",
+    "@notifee/react-native": "^9.1.8",
+    "@react-native-community/netinfo": "12.0.1",
+    "expo": "~58.0.25",
+    "expo-application": "~58.1.2",
+    "expo-audio": "~58.0.12",
+    "expo-build-properties": "~58.0.12",
+    "expo-camera": "~58.0.14",
+    "expo-clipboard": "~58.0.4",
+    "expo-dev-client": "~58.0.20",
+    "expo-file-system": "~58.0.13",
+    "expo-haptics": "~58.0.8",
+    "expo-image-manipulator": "~58.0.16",
+    "expo-image-picker": "~58.0.10",
+    "expo-modules-core": "58.1.0",
+    "expo-secure-store": "~58.0.3",
+    "expo-sqlite": "~58.0.17",
+    "expo-status-bar": "~58.0.5",
+    "expo-system-ui": "~58.0.7",
+    "fast-text-encoding": "^1.0.6",
+    "markdown-it": "14.3.3",
+    "react": "19.3.0",
+    "react-native": "0.88.1",
+    "react-native-get-random-values": "^2.1.0",
+    "react-native-markdown-display": "^7.0.2",
+    "react-native-safe-area-context": "~5.11.1",
+    "react-native-url-polyfill": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.2.0",
+    "@types/react": "~19.3.0",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "prebuild": "expo prebuild --platform android",
+    "typecheck": "tsc --noEmit",
+    "bundle": "expo export --platform android --output-dir ../.artifacts/bundle"
+  },
+  "private": true
+}
