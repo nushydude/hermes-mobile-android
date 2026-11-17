@@ -201,3 +201,31 @@ it('ignores long-wait feedback from an older voice turn',async()=>{
  const f=fixture();await f.controller.start();await f.controller.stop();let valid!:()=>boolean;f.adapter.send=async(_text,check)=>{valid=check;};await f.controller.send();
  f.controller.end();f.controller.waitingLonger(valid);expect(f.controller.getState()).toMatchObject({phase:'idle',notice:null,sentText:'',activity:null});
 });
+
+it('skips synthesis when muted while explicit replay remains available',async()=>{
+ const f=fixture();f.adapter.shouldSpeak=()=>false;
+ await f.controller.start();await f.controller.stop();await f.controller.send();await f.controller.reply('reply');
+ expect(f.adapter.play).not.toHaveBeenCalled();expect(f.controller.getState().phase).toBe('idle');
+ await f.controller.replay('reply');expect(f.adapter.play).toHaveBeenCalledTimes(1);f.controller.end();
+});
+it('mute aborts pending synthesis and ignores its late completion',async()=>{
+ const f=fixture(),pending=deferred<void>();let signal!:AbortSignal;f.adapter.play=(_text,s)=>{signal=s;return pending.promise;};
+ const playing=f.controller.play('reply');f.controller.mute();expect(signal.aborted).toBe(true);expect(f.controller.getState().phase).toBe('idle');pending.resolve();await playing;expect(f.controller.getState().phase).toBe('idle');
+});
+it('muted automatic completion rearms only once after cooldown',async()=>{
+ vi.useFakeTimers();try{
+  const f=fixture();f.adapter.shouldSpeak=()=>false;f.controller.startConversation();await vi.advanceTimersByTimeAsync(0);await f.controller.stop();
+  expect(f.controller.getState().phase).toBe('sent');await f.controller.reply('reply');expect(f.controller.getState().phase).toBe('cooldown');expect(f.adapter.play).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(400);expect(f.adapter.start).toHaveBeenCalledTimes(2);f.controller.end();await vi.advanceTimersByTimeAsync(1000);expect(f.adapter.start).toHaveBeenCalledTimes(2);
+ }finally{vi.useRealTimers();}
+});
+
+it('muting an active automatic reply pauses until explicit resume',async()=>{
+ vi.useFakeTimers();try{
+  const f=fixture(),pending=deferred<'finished'>();let signal!:AbortSignal;
+  f.adapter.play=(_text,s)=>{signal=s;return pending.promise;};f.controller.startConversation();await vi.advanceTimersByTimeAsync(0);await f.controller.stop();
+  const reply=f.controller.reply('reply');expect(f.controller.getState().phase).toBe('playing');f.controller.mute();expect(signal.aborted).toBe(true);expect(f.controller.getState().phase).toBe('paused');
+  pending.resolve('finished');await reply;await vi.advanceTimersByTimeAsync(1000);expect(f.adapter.start).toHaveBeenCalledTimes(1);
+  f.controller.resume();await vi.advanceTimersByTimeAsync(0);expect(f.adapter.start).toHaveBeenCalledTimes(2);f.controller.end();
+ }finally{vi.useRealTimers();}
+});

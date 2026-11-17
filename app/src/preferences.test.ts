@@ -33,3 +33,12 @@ describe("activity preference", () => {
     expect(preferences.useShowActivity()).toBe(false);
   });
 });
+
+describe('speak replies preference',()=>{
+ beforeEach(()=>{storage.value=undefined;vi.resetModules();});
+ it('leaves legacy behavior unset and persists explicit on and off',async()=>{
+  let p=await import('./preferences');expect(p.getSpeakReplies()).toBeNull();p.setSpeakReplies(true);
+  vi.resetModules();p=await import('./preferences');expect(p.getSpeakReplies()).toBe(true);p.setSpeakReplies(false);
+  vi.resetModules();p=await import('./preferences');expect(p.getSpeakReplies()).toBe(false);
+ });
+});

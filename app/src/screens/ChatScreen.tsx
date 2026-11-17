@@ -7,9 +7,10 @@ import { appendQuote, findLoadedMessages, highlightParts, measuredSearchHop, nex
 import { actionHaptic } from "../components/haptics";
 import { FollowLatest, isNearBottom } from "../components/followLatest";
 import { waitingPrompts, unknownPrompts } from "../components/pendingQueue";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   Alert,
+  AppState,
   ActivityIndicator,
   FlatList,
   Image,
@@ -30,7 +31,7 @@ import { colors } from "../theme";
 import { Button, Card, ui } from "../components/UI";
 import { parseSlash, modelPayload } from "../components/slash";
 import { extractImages } from "../components/images";
-import { setShowActivity, useShowActivity } from "../preferences";
+import { setShowActivity, useShowActivity, getSpeakReplies, setSpeakReplies, useSpeakReplies, subscribeSpeakReplies } from "../preferences";
 import {
   showActivityEvent,
   showHistoryMessage,
@@ -38,6 +39,12 @@ import {
 } from "../components/activityVisibility";
 import { ModelPicker, type LoadState } from "../components/ModelPicker";
 import { mobileModelChoices, type ModelChoice } from "../components/selections";
+import { SpeechOwner, type SpeechLease } from '../components/speechOwner';
+import { VoicePlayback } from '../components/voicePlayback';
+import { nativeVoicePlayback } from '../components/voicePlaybackNative';
+import { speechParts, speechText } from '../components/voiceText';
+import { TypedSpeechWatcher } from '../components/typedSpeechWatcher';
+import { conversationDiagnostics } from '../state/conversationDiagnostics';
 import { VoiceSheet } from "../components/VoiceSheet";
 import { useConnectionGrace } from "../components/useConnectionGrace";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -399,6 +406,7 @@ export function ChatScreen() {
   const endpointEpoch = appManager.getEndpointEpoch();
   const connectionGrace = useConnectionGrace();
   const showActivity = useShowActivity();
+  const speakReplies = useSpeakReplies();
   const state = useAppStore(s => ({activeSessionId:s.activeSessionId,chat:s.chats[s.activeSessionId!],sessions:s.sessions,drafts:s.drafts,outbox:s.outbox,queuedEdits:s.queuedEdits,connection:s.connection,error:s.error})),
     id = state.activeSessionId!,
     chat = state.chat,
@@ -410,7 +418,7 @@ export function ChatScreen() {
     [submitting, setSubmitting] = useState(false),
     [bottom, setBottom] = useState(true),
     [settings, setSettings] = useState(false),
-    [voice, setVoice] = useState<{reply?:string} | null>(null),
+    [voice, setVoice] = useState<{reply?:string;lease:SpeechLease} | null>(null),
     [showSavedText, setShowSavedText] = useState(false),
     [title, setTitle] = useState(""),
     [model, setModel] = useState<ModelChoice | null>(null),
@@ -421,6 +429,26 @@ export function ChatScreen() {
     [modelBusy, setModelBusy] = useState(false),
     [options, setOptions] = useState<ModelChoice[]>([]),
     [suggestions, setSuggestions] = useState<string[]>([]);
+  const playbackTrace = useRef<number|null>(null);
+  const origin=appManager.getConfiguredOrigin();
+  const speechOwner=useMemo(()=>new SpeechOwner(new VoicePlayback(nativeVoicePlayback((text,signal)=>appManager.speakAudio(text,signal,endpointEpoch),()=>AppState.currentState==='active' && appManager.getEndpointEpoch()===endpointEpoch && appManager.getConfiguredOrigin()===origin && appManager.getState().activeSessionId===id,()=>conversationDiagnostics.mark(playbackTrace.current,'playback_start')))),[id,endpointEpoch,origin]);
+  const speechState=useSyncExternalStore(speechOwner.playback.subscribe,speechOwner.playback.getState,speechOwner.playback.getState);
+  const typedLease=useRef<SpeechLease|null>(null), voiceLease=useRef<SpeechLease|null>(null);
+  const speechWatches=useRef(new Set<()=>void>());
+  useEffect(()=>()=>{for(const close of speechWatches.current)close();speechWatches.current.clear();speechOwner.dispose();typedLease.current=null;voiceLease.current=null;},[speechOwner]);
+  useEffect(()=>{const stop=()=>{for(const close of speechWatches.current)close();typedLease.current?.release();typedLease.current=null;};const lifecycle=AppState.addEventListener('change',next=>{if(next!=='active')stop();});const unsubscribe=appManager.subscribe(()=>{if(appManager.getEndpointEpoch()!==endpointEpoch || appManager.getConfiguredOrigin()!==origin || appManager.getState().activeSessionId!==id)stop();});return()=>{lifecycle.remove();unsubscribe();};},[speechOwner]);
+  useEffect(()=>subscribeSpeakReplies(()=>{if(getSpeakReplies()===false){for(const close of speechWatches.current)close();typedLease.current?.release();typedLease.current=null;}}),[speechOwner]);
+  const openVoice=(reply?:string)=>{typedLease.current?.release();typedLease.current=null;voiceLease.current?.release();const lease=speechOwner.acquire();voiceLease.current=lease;setVoice({reply,lease});};
+  const closeVoice=(lease:SpeechLease)=>{lease.release();if(voiceLease.current===lease){voiceLease.current=null;setVoice(current=>current?.lease===lease?null:current);}};
+  function watchTypedSend(){
+    if(getSpeakReplies()!==true)return null;
+    const valid=()=>getSpeakReplies()===true && !voiceLease.current && AppState.currentState==='active' && appManager.getEndpointEpoch()===endpointEpoch && appManager.getConfiguredOrigin()===origin && appManager.getState().activeSessionId===id;
+    let unsubEvent=()=>{},unsubState=()=>{},timer:ReturnType<typeof setTimeout>|undefined,closed=false;
+    const close=()=>{if(closed)return;closed=true;watcher.close();unsubEvent();unsubState();if(timer)clearTimeout(timer);speechWatches.current.delete(close);};
+    const watcher=new TypedSpeechWatcher(id,submission=>appManager.getState().chats[id]?.localMessages.find(x=>x.submission_id===submission)?.admission_id,valid,text=>{close();if(!valid())return;const parts=speechParts(speechText(text));if(!parts.length)return;playbackTrace.current=null;const lease=speechOwner.acquire();typedLease.current=lease;void lease.play(parts,new AbortController().signal).catch(()=>{});});
+    unsubEvent=appManager.subscribeVoiceEvents(watcher.event);unsubState=appManager.subscribe(watcher.refresh);speechWatches.current.add(close);if(speechWatches.current.size>100)speechWatches.current.values().next().value?.();timer=setTimeout(close,120000);
+    return {bind:watcher.bind,close};
+  }
   const [actionTarget,setActionTarget]=useState<MessageActionTarget|null>(null);
   const [findOpen,setFindOpen]=useState(false), [findQuery,setFindQuery]=useState(''), [findKey,setFindKey]=useState<string|null>(null), [findError,setFindError]=useState('');
   const list = useRef<FlatList>(null);
@@ -687,7 +715,7 @@ export function ChatScreen() {
     const next=appendQuote(appManager.getState().drafts[id] ?? '',content,start,end);
     if(next!==null)appManager.setDraft(id,next);
   },[id,isCurrentChat]);
-  const onReadReply = useCallback((reply:string) => setVoice({reply}), []);
+  const onReadReply = useCallback((reply:string) => openVoice(reply), [speechOwner]);
   const renderTimelineItem = useCallback(({item}:{item:TimelineItem}) =>
     item.kind === "message" ? <Message value={item.value} sessionId={id} showActivity={showActivity} onReadReply={onReadReply} onActions={onActions} searchQuery={findOpen?findQuery:''} focused={findOpen && !!findQuery.trim() && item.key===findKey} />
       : item.kind === "local" ? <LocalMessage value={item.value} sessionId={id} onActions={onActions} searchQuery={findOpen?findQuery:''} focused={findOpen && !!findQuery.trim() && item.key===findKey} />
@@ -742,9 +770,10 @@ export function ChatScreen() {
       } else {
         const directive: any = await appManager.command(id, rawName, arg);
         assertEndpoint();
-        if (directive.type === "send" || directive.type === "skill")
-          await appManager.send(id, directive.message ?? draft);
-        else if (directive.type === "prefill") {
+        if (directive.type === "send" || directive.type === "skill") {
+          const watch=watchTypedSend();
+          try {const submission=await appManager.send(id, directive.message ?? draft);if(submission)watch?.bind(submission);else watch?.close();} catch(error){watch?.close();throw error;}
+        } else if (directive.type === "prefill") {
           appManager.replaceDraftIfUnchanged(
             id,
             draft,
@@ -769,11 +798,12 @@ export function ChatScreen() {
       appManager.replaceDraftIfUnchanged(id, draft, "");
       return;
     }
-    await appManager.send(
+    const watch=watchTypedSend();
+    try {const submission=await appManager.send(
       id,
       draft,
       attachments.map(({ path, mime }) => ({ path, mime })),
-    );
+    ); if(submission)watch?.bind(submission);else watch?.close();} catch(error){watch?.close();throw error;}
     assertEndpoint();
     if (appManager.getState().activeSessionId === id) setAttachments((current) =>
       current.filter(
@@ -1147,13 +1177,15 @@ export function ChatScreen() {
         <View style={{flexDirection:"row",alignItems:"flex-end",backgroundColor:colors.surface,borderRadius:28,minHeight:58,paddingHorizontal:4,paddingVertical:5}}>
           <Pressable accessibilityRole="button" accessibilityLabel="Take photo" disabled={uploading || !!chat?.sessionUnavailable} onPress={() => void attach(true).catch(e => Alert.alert("Could not attach image", String(e)))} style={{width:48,height:48,alignItems:"center",justifyContent:"center",opacity:uploading || chat?.sessionUnavailable ? 0.4 : 1}}><Ionicons name="camera-outline" size={23} color={colors.accent} /></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Attach photos" disabled={uploading || !!chat?.sessionUnavailable} onPress={() => void attach(false).catch(e => Alert.alert("Could not attach image", String(e)))} style={{width:48,height:48,alignItems:"center",justifyContent:"center",opacity:uploading || chat?.sessionUnavailable ? 0.4 : 1}}><Ionicons name="attach" size={23} color={colors.accent} /></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Talk in this chat" disabled={!!chat?.sessionUnavailable} onPress={() => setVoice({})} style={{width:48,height:48,alignItems:"center",justifyContent:"center",opacity:chat?.sessionUnavailable?0.4:1}}><Ionicons name="mic-outline" size={22} color={colors.accent} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Talk in this chat" disabled={!!chat?.sessionUnavailable} onPress={() => openVoice()} style={{width:48,height:48,alignItems:"center",justifyContent:"center",opacity:chat?.sessionUnavailable?0.4:1}}><Ionicons name="mic-outline" size={22} color={colors.accent} /></Pressable>
           <MessageInput key={`${endpointEpoch}:${id}`} value={draft} onChangeText={(t) => appManager.setDraft(id,t)} />
           <Pressable accessibilityRole="button" accessibilityLabel={chat?.running ? "Queue message" : "Send message"} disabled={uploading || submitting || !!chat?.sessionUnavailable || (!draft.trim() && !attachments.length)} onPress={startSubmit} style={{width:48,height:48,borderRadius:24,alignItems:"center",justifyContent:"center",backgroundColor:colors.accent,opacity:uploading || submitting || chat?.sessionUnavailable || (!draft.trim() && !attachments.length) ? 0.4 : 1}}><Ionicons name="send" size={21} color={colors.ink} /></Pressable>
         </View>
       </View>
       <MessageActionSheet key={`${endpointEpoch}:${id}`} target={actionTarget} onClose={()=>setActionTarget(null)} onQuote={onQuote} onRead={onReadReply} isCurrent={isCurrentChat} />
-      {voice && <VoiceSheet sessionId={id} origin={appManager.getConfiguredOrigin()} endpointEpoch={endpointEpoch} title={row?.title || "Chat"} model={String(obj(chat?.snapshot?.info).model ?? row?.model ?? "Default model")} reasoning={String(obj(chat?.snapshot?.info).reasoning_effort ?? "Default reasoning")} reply={voice.reply} onClose={() => setVoice(null)} />}
+      <Button secondary label={`Speak replies: ${speakReplies===null?'Off for typed':speakReplies?'On':'Off'}`} onPress={()=>{const next=speakReplies!==true;setSpeakReplies(next);if(!next){for(const close of speechWatches.current)close();typedLease.current?.release();typedLease.current=null;}}} />
+      {typedLease.current?.owns() && speechState.phase!=='idle' && <View style={{flexDirection:'row',gap:8}}><Text style={ui.muted}>Speaking reply</Text><Button secondary label={speechState.phase==='paused'?'Resume':'Pause'} onPress={()=>typedLease.current?.toggle()} /><Button secondary label="Stop" onPress={()=>{typedLease.current?.release();typedLease.current=null;}} /></View>}
+      {voice && <VoiceSheet sessionId={id} origin={appManager.getConfiguredOrigin()} endpointEpoch={endpointEpoch} title={row?.title || "Chat"} model={String(obj(chat?.snapshot?.info).model ?? row?.model ?? "Default model")} reasoning={String(obj(chat?.snapshot?.info).reasoning_effort ?? "Default reasoning")} reply={voice.reply} owner={speechOwner} lease={voice.lease} setPlaybackTrace={trace=>{playbackTrace.current=trace;}} onClose={()=>closeVoice(voice.lease)} />}
       <Sheet visible={settings} title="Chat settings" onClose={closeSettings} closeDisabled={modelBusy}>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 22, gap: 12 }}>
             {!!chat?.usage && !!formatUsage(chat.usage) && <Text style={ui.muted}>{formatUsage(chat.usage)}</Text>}

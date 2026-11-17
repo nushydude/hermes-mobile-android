@@ -690,6 +690,17 @@ describe('shared drafts and draft image recovery', () => {
     manager.dispose();
   });
 
+  it('keeps a failed transcript transfer retryable without duplicating text or losing images', async () => {
+    mocks.rows=new Map(); const manager=new AppManager(); await manager.initialize();
+    manager.setDraft('s','Existing'); await manager.setDraftAttachments('s',[firstImage]); mocks.fail=true;
+    await expect(manager.importSharedDraft('s',shareId,'Transcript',[],()=>true,'transcript')).rejects.toThrow('disk full');
+    expect(manager.getState().drafts.s).toBe('Existing\n\nTranscript');
+    expect(manager.getState().error).toContain('transcript');expect(manager.getState().outbox).toEqual([]);
+    mocks.fail=false; await manager.importSharedDraft('s',shareId,'Transcript',[],()=>true,'transcript');
+    expect(cachePayload(mocks.rows.get('state')!).drafts.s).toBe('Existing\n\nTranscript');
+    expect(manager.getState().chats.s.draftAttachments).toEqual([firstImage]);manager.dispose();
+  });
+
   it('keeps the import identity after restart and refuses using it for another chat', async () => {
     mocks.rows=new Map(); const manager=new AppManager(); await manager.initialize();
     await manager.importSharedDraft('s',shareId,'Saved',[firstImage]); manager.dispose();

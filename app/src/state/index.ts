@@ -448,7 +448,7 @@ export class AppManager {
     this.setChat(sessionId,{...chat,draftAttachments:attachments});
     return this.checkpointWarning('images', this.persist(), 'Could not save draft images. Keep the app open and try again.');
   };
-  importSharedDraft = (sessionId:string,shareId:string,text:string,images:NonNullable<ChatState['draftAttachments']>,valid?:()=>boolean) => this.queueForEndpoint(async()=>{
+  importSharedDraft = (sessionId:string,shareId:string,text:string,images:NonNullable<ChatState['draftAttachments']>,valid?:()=>boolean,source:'share'|'transcript'='share') => this.queueForEndpoint(async()=>{
     if(valid&&!valid())throw new Error('Share preparation was cancelled.');
     if(!/^[a-f0-9-]{36}$/i.test(shareId)||text.length>100000)throw new Error('This share is invalid or too large.');
     const prior=Object.entries(this.state.chats).find(([,chat])=>chat.importedShareIds?.includes(shareId));
@@ -464,7 +464,7 @@ export class AppManager {
     this.update({drafts:{...this.state.drafts,[sessionId]:combined},chats:{...this.state.chats,[sessionId]:{...chat,draftAttachments:attachments,importedShareIds:[...(chat.importedShareIds ?? []),shareId].slice(-100)}}});
     // Keep the in-memory draft and source inbox on failure. Retrying the same share checkpoints
     // the current draft without appending it twice; no prompt is submitted by importing.
-    try{await this.persist();}catch(error){this.update({error:'Could not save the shared draft. The original share is still in your inbox.'});throw error;}
+    try{await this.persist();}catch(error){this.update({error:source==='transcript'?'Could not save the transcript draft. Retry while it remains open.':'Could not save the shared draft. The original share is still in your inbox.'});throw error;}
   });
   swapAliasDraft = (sessionId: string, aliasId: string) => {
     const chat = this.state.chats[sessionId]; if (!chat?.draftAlternatives?.includes(aliasId)) return;

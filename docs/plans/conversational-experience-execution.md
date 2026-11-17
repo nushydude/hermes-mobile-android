@@ -16,7 +16,7 @@ Read-only investigation identified the separate sibling Home Dashboard and its d
 
 ## Commit/progression prerequisite
 
-On 18 November the owner authorized committing the reviewed baseline separately and continuing all phases after independent review/remediation. Baseline commit: `364006c`. Phase 0 is being committed separately against that baseline; no Phase 1 implementation has been made yet. Phase 1 source investigation is prepared; native-voice and credit-enforcement gates remain as described in the [primary plan](../../HERMES_ANDROID_CONVERSATIONAL_EXPERIENCE_PLAN.md).
+On 18 November the owner authorized committing the reviewed baseline separately and continuing all phases after independent review/remediation. Baseline commit: `364006c`. At that checkpoint Phase 0 was prepared separately and Phase 1 had not started. Subsequent completed checkpoints are recorded below; native-voice and credit-enforcement gates remain as described in the [primary plan](../../HERMES_ANDROID_CONVERSATIONAL_EXPERIENCE_PLAN.md).
 
 This record is an implementation checkpoint, not completion of the full roadmap or a tested release APK.
 
@@ -33,3 +33,9 @@ Phase 1 commit: `408c9cb`. A subsequent authenticated read-only runtime/catalog 
 Added unique per-run benchmark folders, an explicit manual live-invocation guard and offline timing summaries with arm-separated sample counts, medians, nearest-rank p95, failed/incomplete runs and missing measurements. The live flag is not a credit/resource authorization mechanism; no live benchmark was run. The standalone offline suite is now in test:host.
 
 Independent GPT-6.1 Sol/xhigh tooling review cleared the candidate with no correctness findings. Main passed all four unit checks, additional synthetic CLI/error-sanitization/size/20-sample percentile checks, and the full offline host aggregate. One trace per wrapped event input and comparable-workload selection are documented limits. See tools/smoke/README.md. This change is committed separately from the Phase 2 app candidate.
+
+## Phase 2 — unified foreground speech controls
+
+Added shared single-owner playback, explicit Speak replies, exactly correlated typed readback, and Type instead using the existing durable draft import. Independent GPT-6.1 Sol/xhigh review required two remediation cycles: active hands-free mute must pause until Resume, transcript transfer needs synchronous ownership/revision fences, revoked leases must invalidate capture/STT callbacks, and rejected transfers need a safe recovery path. Final R2 independently cleared with no remaining actionable source findings.
+
+Main passed the full host aggregate on the initial candidate, then affected checks after repairs (final R2 component suite46; manager110 and preferences/types after R1). Unchanged-module evidence retained. A no-inference empty speech-stream handshake minted a scoped ticket, opened the socket and received start/end metadata with zero binary frames. No text/audio was submitted for inference. This verifies transport only. Native PCM/streaming STT remain conditional on measured need and approved device/provider acceptance; no speed win is claimed. See [Phase2 behavior](conversational-phase2.md).
