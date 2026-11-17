@@ -1,0 +1,9 @@
+# Conversation timing diagnostics
+
+This optional diagnostic is disabled on process startup. In the voice sheet, **Enable timing** starts collection; **Copy timings** copies the current bounded, content-free event list to the clipboard. Disable timing clears all collected data. Changing the configured gateway or disposing the manager also disables and clears it. Timings live in memory only and are not uploaded automatically.
+
+Events carry only a locally generated numeric trace, a fixed stage name, and elapsed milliseconds from that trace's monotonic start. No conversation content, audio, endpoint, provider credentials, session identifiers or tool arguments are exported. Retention is limited to 500 events and 500 active traces; older data can be dropped. Clipboard content is accessible to the user and subject to system clipboard behavior.
+
+Voice traces begin when recording starts, and capture endpoint, transcription request, local submission checkpoint, matched reply completion and first native player playing status. The playing status is an approximation, not an acoustic first-sound measurement. Manual replay is not measured as the original reply. Typed traces begin at submission and track the matching completion when the canonical event identifies the submission or admission. Events may be absent if work fails, is cancelled, loses ownership, is evicted or the app restarts; absent events are not zero duration. Timing cannot isolate Hermes provider TTFT, network, memory, reasoning or tool overhead.
+
+Use only approved fixture sessions for measurement, with the existing Pro/included-credit limits. The diagnostic itself does not start a benchmark or make provider requests. Verify the feature on the owner phone and assess trace coverage and overhead before treating this as a complete performance baseline.

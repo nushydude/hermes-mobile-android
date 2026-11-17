@@ -3,10 +3,10 @@ import { File, Paths } from 'expo-file-system';
 import type { PlaybackAdapter } from './voicePlayback';
 
 type Synthesize=(text:string,signal:AbortSignal)=>Promise<{mime:string;base64:string}>;
-export function nativeVoicePlayback(synthesize:Synthesize, valid:()=>boolean):PlaybackAdapter {
+export function nativeVoicePlayback(synthesize:Synthesize, valid:()=>boolean, onStarted?:()=>void):PlaybackAdapter {
   return {acquire:async(text,signal)=>{
-    let file:File|null=null, player:AudioPlayer|null=null;
-    const cleanup=()=>{if(player){try{player.pause();}catch{}try{player.remove();}catch{}player=null;}if(file){try{if(file.exists)file.delete();}catch{}file=null;}};
+    let file:File|null=null, player:AudioPlayer|null=null, active=true;
+    const cleanup=()=>{active=false;if(player){try{player.pause();}catch{}try{player.remove();}catch{}player=null;}if(file){try{if(file.exists)file.delete();}catch{}file=null;}};
     const check=()=>{if(signal.aborted||!valid())throw new Error('Cancelled');};
     try{
       check();
@@ -36,7 +36,7 @@ export function nativeVoicePlayback(synthesize:Synthesize, valid:()=>boolean):Pl
         }catch{done(true);}
       });
       check();
-      return {play:()=>current.play(),pause:()=>current.pause(),seek:(seconds)=>current.seekTo(seconds),rate:(speed)=>current.setPlaybackRate(speed),release:cleanup,subscribe:(fn)=>{const sub=current.addListener('playbackStatusUpdate',s=>fn({position:s.currentTime,duration:s.duration,playing:s.playing,buffering:s.isBuffering,finished:s.didJustFinish,error:!!s.error}));return()=>sub.remove();}};
+      let reported=false;return {play:()=>current.play(),pause:()=>current.pause(),seek:(seconds)=>current.seekTo(seconds),rate:(speed)=>current.setPlaybackRate(speed),release:cleanup,subscribe:(fn)=>{let subscribed=true;const sub=current.addListener('playbackStatusUpdate',s=>{if(s.playing&&!reported){try{if(subscribed&&active&&!signal.aborted&&valid()){reported=true;onStarted?.();}}catch{}}fn({position:s.currentTime,duration:s.duration,playing:s.playing,buffering:s.isBuffering,finished:s.didJustFinish,error:!!s.error});});return()=>{subscribed=false;sub.remove();};}};
     }catch(error){cleanup();throw error;}
   }};
 }

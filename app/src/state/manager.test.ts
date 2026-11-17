@@ -16,6 +16,7 @@ vi.mock('@hermes-mobile/protocol', () => ({ randomUUID: () => crypto.randomUUID(
 } }));
 vi.mock('../notifications', () => ({ notifyEvent: vi.fn(async () => {}), reconcileSnapshot: vi.fn(async () => {}) }));
 import { AppManager } from './index';
+import { conversationDiagnostics } from './conversationDiagnostics';
 const cachePayload = (value: string) => { const parsed = JSON.parse(value); return parsed.payload ?? parsed; };
 const flush = async () => { for (let n=0;n<10;n++) await new Promise(r => setTimeout(r,0)); };
 beforeEach(() => { mocks.saved=''; mocks.fail=false; mocks.clients=[]; mocks.secure.clear(); mocks.failConnect=false; mocks.failReplace=false; mocks.rejectReplace=false; mocks.replacements=[]; mocks.transcript=null; mocks.rejectSubmissionSession=''; mocks.listCalls=[]; mocks.storedRows=[]; mocks.blockWrite=null; mocks.writeHook=null; mocks.openHook=null; mocks.wire=[]; mocks.rows=null; mocks.connectHook=null; mocks.secureHook=null; mocks.listHook=null; mocks.readHook=null; mocks.ackReceipt={}; mocks.receiptResult={}; });
@@ -942,4 +943,19 @@ it('does not let an older full checkpoint clear a newer failed draft', async () 
   expect(manager.getState().error).toBe('Could not save your draft.');
   mocks.writeHook=null; (manager as any).update({error:'Unrelated connection error'}); await manager.setDraftAttachments('s',[]);
   expect(manager.getState().error).toBe('Unrelated connection error'); manager.dispose();
+});
+
+
+it('records only the matching typed completion without exporting message content', async () => {
+  mocks.secure.set('hermes.baseUrl','https://example.test'); mocks.secure.set('hermes.token','secret');
+  const manager=new AppManager(); await manager.initialize(); await flush();
+  conversationDiagnostics.setEnabled(true); const submission=await manager.send('s','private words'); await flush();
+  const client=mocks.clients[0]; client.opts.onEvent({type:'message.complete',session_id:'s',payload:{text:'unrelated',persisted_turn:{submission_id:'other'}}});
+  expect(conversationDiagnostics.export().map(e=>e.stage)).toEqual(['submission_start','submission_saved']);
+  client.opts.onEvent({type:'message.complete',session_id:'wrong-session',payload:{text:'other',persisted_turn:{submission_id:submission}}});
+  expect(conversationDiagnostics.export().map(e=>e.stage)).toEqual(['submission_start','submission_saved']);
+  const event={type:'message.complete',session_id:'s',payload:{text:'private answer',persisted_turn:{submission_id:submission}}};
+  client.opts.onEvent(event); client.opts.onEvent(event); const result=conversationDiagnostics.export();
+  expect(result.map(e=>e.stage)).toEqual(['submission_start','submission_saved','reply_complete']);
+  expect(JSON.stringify(result)).not.toContain('private'); manager.dispose();
 });
