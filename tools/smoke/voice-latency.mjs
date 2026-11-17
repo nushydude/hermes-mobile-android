@@ -6,11 +6,16 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { boundedBytes, metadata, compareMetadata } from './audio-core.mjs';
+import { parseLiveArgs, runDirectory } from './timing-summary.mjs';
 
+let arm;
+try { ({arm} = parseLiveArgs(process.argv.slice(2))); }
+catch { console.error('Explicit --run-live --arm baseline|candidate required.'); process.exit(2); }
 const origin = gatewayOrigin();
-const directory = '.artifacts/handsfree-20261117';
-mkdirSync(directory, { recursive: true });
-const evidence = { started_at: new Date().toISOString(), result: 'incomplete', timings_ms: {}, cleanup: 'not_needed' };
+const directory = runDirectory(arm);
+mkdirSync('.artifacts/conversational-latency', { recursive: true });
+mkdirSync(directory, { recursive: false });
+const evidence = { arm, started_at: new Date().toISOString(), result: 'incomplete', timings_ms: {}, cleanup: 'not_needed' };
 let stage = 'credentials', session, client;
 const now = () => performance.now();
 const record = (name, start) => { evidence.timings_ms[name] = Math.round(now() - start); };

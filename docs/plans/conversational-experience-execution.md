@@ -25,3 +25,11 @@ This record is an implementation checkpoint, not completion of the full roadmap 
 Implemented Fast/Balanced/Deep choices gated to enabled existing OpenAI-Codex catalog entries, authoritative Custom/current labeling and atomic per-session model+reasoning mutation. Existing advanced model/reasoning/favourite controls remain. Saved but unadmitted prompts prevent a preset change; no profile defaults/configuration changed.
 
 Independent GPT-6.1 Sol/xhigh review cleared v3 after two remediation cycles: initial preset confirmation locking/stale alerts and send-admission ordering, followed by shared ownership for existing advanced confirmations. Main passed the full host aggregate before repairs, then affected manager suite (109), preset helper suite (4), workspace types and whitespace checks after repairs; unchanged-module evidence was retained. See [mode behavior and limits](conversation-modes.md). No live provider/phone tests or speed improvement claim.
+
+Phase 1 commit: `408c9cb`. A subsequent authenticated read-only runtime/catalog check through the configured tailnet endpoint reported canonical readiness, authenticated OpenAI-Codex and all three preset model IDs listed without an unavailable flag. No session was created and no inference occurred; quality/effective execution/latency remain unmeasured.
+
+## Phase 0 tooling follow-up
+
+Added unique per-run benchmark folders, an explicit manual live-invocation guard and offline timing summaries with arm-separated sample counts, medians, nearest-rank p95, failed/incomplete runs and missing measurements. The live flag is not a credit/resource authorization mechanism; no live benchmark was run. The standalone offline suite is now in test:host.
+
+Independent GPT-6.1 Sol/xhigh tooling review cleared the candidate with no correctness findings. Main passed all four unit checks, additional synthetic CLI/error-sanitization/size/20-sample percentile checks, and the full offline host aggregate. One trace per wrapped event input and comparable-workload selection are documented limits. See tools/smoke/README.md. This change is committed separately from the Phase 2 app candidate.

@@ -68,3 +68,20 @@ corrections in [PROTOCOL_CONTRACT.md](../../PROTOCOL_CONTRACT.md).
 Audio and latency probes perform real gateway/provider work with bounded synthetic fixtures.
 They are not part of offline `test:host` and do not establish physical microphone/playback quality.
 See [verification and acceptance](../../docs/verification.md) for the complete check matrix.
+
+`node tools/smoke/voice-latency.mjs --run-live --arm baseline` (or `candidate`)
+records one synthetic run in a fresh UUID-named directory under ignored
+`.artifacts/conversational-latency/`. Each run uses its own fixture, submission
+checkpoint and result; it never changes the configured model/provider. The explicit
+flag is an intent gate, not evidence that included-credit limits or desktop resource
+approval are satisfied. Live runs remain ineligible for automation until the owner’s
+free-allowance, provider and local-workload prerequisites are verified.
+
+Offline `node tools/smoke/timing-summary-cli.mjs <result-file> ...` groups labeled
+baseline/candidate files, reporting median, nearest-rank p95, sample counts,
+failed/incomplete runs and missing stages. Include only comparable workloads;
+failures and incomplete stages are not zero-latency samples. A numeric diagnostic
+event export can be wrapped as `{ "arm": "baseline", "result": "passed", "events": [...] }`
+with one trace per file. First text is a gateway-visible delta, not provider TTFT;
+playback status is not an acoustic measurement. Run local synthetic tests with
+`node --test tools/smoke/timing-summary.test.mjs`.
