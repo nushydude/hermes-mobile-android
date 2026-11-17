@@ -4,15 +4,15 @@ Recorded 18 November 2026. This is a documentation snapshot, not a live service-
 
 ## New preview candidate
 
-[0.3.2 (9)](releases/0.3.2.md) is built and not installed. Reviewed conversational controls, timing diagnostics and observed-task visibility are implemented. Main's 386 offline checks, types, contract drift, native build and APK integrity checks pass. Device, real-child and performance acceptance remain open; native duplex voice is deferred behind continuity and included-credit hard-stop gates. No Hermes/Home Dashboard configuration or account/plan changes were made. See the [execution record](plans/conversational-experience-execution.md) and [owner checklist](plans/conversational-phase5-acceptance.md).
+[0.3.2 (9)](releases/0.3.2.md) was installed as an in-place update on 18 November 2026; phone behavior remains untested. Reviewed conversational controls, timing diagnostics and observed-task visibility are implemented. Main's 386 offline checks, types, contract drift, native build and APK integrity checks pass. Device, real-child and performance acceptance remain open; native duplex voice is deferred behind continuity and included-credit hard-stop gates. No Hermes/Home Dashboard configuration or account/plan changes were made. See the [execution record](plans/conversational-experience-execution.md) and [owner checklist](plans/conversational-phase5-acceptance.md).
 
 ## Release
 
-Last recorded successful installation: **[0.3.1 (8)](releases/0.3.1.md)** on the owner's Pixel.
+Last recorded successful installation: **[0.3.2 (9)](releases/0.3.2.md)** on the owner's Pixel.
 `adb install -r` returned Success and package metadata confirmed version/code. Previous installed
-build: 0.3.0 (7). No app launch or phone behavior tests were performed during this installation.
+build: 0.3.1 (8). No app launch or phone behavior tests were performed during this installation.
 
-The installed update includes all eight
+The retained 0.3.1 baseline includes all eight
 [source-audit repairs](audits/2026-11-17-remediation.md), narrow duplication removal and independent
 Sol/xhigh review. Main's 328 offline checks, types and package integrity passed. Native behavior
 remains owner acceptance.
