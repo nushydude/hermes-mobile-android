@@ -39,3 +39,9 @@ Independent GPT-6.1 Sol/xhigh tooling review cleared the candidate with no corre
 Added shared single-owner playback, explicit Speak replies, exactly correlated typed readback, and Type instead using the existing durable draft import. Independent GPT-6.1 Sol/xhigh review required two remediation cycles: active hands-free mute must pause until Resume, transcript transfer needs synchronous ownership/revision fences, revoked leases must invalidate capture/STT callbacks, and rejected transfers need a safe recovery path. Final R2 independently cleared with no remaining actionable source findings.
 
 Main passed the full host aggregate on the initial candidate, then affected checks after repairs (final R2 component suite46; manager110 and preferences/types after R1). Unchanged-module evidence retained. A no-inference empty speech-stream handshake minted a scoped ticket, opened the socket and received start/end metadata with zero binary frames. No text/audio was submitted for inference. This verifies transport only. Native PCM/streaming STT remain conditional on measured need and approved device/provider acceptance; no speed win is claimed. See [Phase2 behavior](conversational-phase2.md).
+
+Phase2 commit: `e69d13b`.
+
+## Phase 3 — native voice gate
+
+Evaluated and deferred: installed upstream lacks the required supported same-session external exchange commit, and included-credit hard stops remain unverified. Independent GPT-6.1 Sol/xhigh outcome review cleared this decision with no tools, based on supplied source/status evidence. Native voice remains disabled; no new account/plan/provider/credential/configuration was introduced. Continue safe independent phases. See [gate evidence and reopening requirements](conversational-phase3-gate.md).
