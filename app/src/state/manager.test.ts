@@ -17,6 +17,49 @@ vi.mock('@hermes-mobile/protocol', () => ({ randomUUID: () => crypto.randomUUID(
 vi.mock('../notifications', () => ({ notifyEvent: vi.fn(async () => {}), reconcileSnapshot: vi.fn(async () => {}) }));
 import { AppManager } from './index';
 import { conversationDiagnostics } from './conversationDiagnostics';
+
+describe('conversation mode mutation',()=>{
+  it('keeps a send behind the atomic mode mutation while preserving the draft',async()=>{
+    mocks.secure.set('hermes.baseUrl','https://example.test');mocks.secure.set('hermes.token','secret');
+    const manager=new AppManager();await manager.initialize();await flush();const client=mocks.clients[0];
+    let release!:(value:any)=>void;const blocked=new Promise<any>(resolve=>{release=resolve;});let payload:any;
+    client.mutate=vi.fn(async (_session:string,_operation:string,value:any)=>{payload=value;return blocked;});
+    manager.setDraft('s','keep this draft');
+    const changing=manager.setConversationMode('s',{model:'gpt-6-luna',provider:'openai-codex',reasoning:'none'});await flush();
+    const sending=manager.send('s','other message',undefined,{preserveDraft:true});await flush();
+    expect(manager.getState().outbox).toHaveLength(0);expect(manager.getState().drafts.s).toBe('keep this draft');
+    expect(payload).toEqual({model:'gpt-6-luna',provider:'openai-codex',reasoning:'none'});
+    release({status:'deferred'});expect(await changing).toEqual({status:'deferred'});await sending;
+    expect(manager.getState().drafts.s).toBe('keep this draft');manager.dispose();
+  });
+  it('returns confirmation and propagates failure without changing drafts',async()=>{
+    mocks.secure.set('hermes.baseUrl','https://example.test');mocks.secure.set('hermes.token','secret');
+    const manager=new AppManager();await manager.initialize();await flush();const client=mocks.clients[0];manager.setDraft('s','saved');
+    client.mutate=vi.fn(async()=>({status:'confirmation_required',confirm:'token'}));
+    const payload={model:'gpt-6.1-sol',provider:'openai-codex',reasoning:'medium'};
+    expect(await manager.setConversationMode('s',payload)).toEqual({status:'confirmation_required',confirm:'token'});
+    client.mutate=vi.fn(async()=>{throw new Error('rejected');});await expect(manager.setConversationMode('s',payload)).rejects.toThrow('rejected');
+    expect(manager.getState().drafts.s).toBe('saved');manager.dispose();
+  });
+  it('rejects a late mutation result after the manager is disposed',async()=>{
+    mocks.secure.set('hermes.baseUrl','https://example.test');mocks.secure.set('hermes.token','secret');
+    const manager=new AppManager();await manager.initialize();await flush();const client=mocks.clients[0];
+    let release!:(value:any)=>void;client.mutate=vi.fn(()=>new Promise(resolve=>{release=resolve;}));
+    const changing=manager.setConversationMode('s',{model:'gpt-6-luna',provider:'openai-codex',reasoning:'none'});await flush();
+    manager.dispose();release({status:'applied'});await expect(changing).rejects.toThrow('Gateway changed');
+  });
+  it('does not overtake a saved message awaiting gateway admission',async()=>{
+    mocks.secure.set('hermes.baseUrl','https://example.test');mocks.secure.set('hermes.token','secret');
+    const manager=new AppManager();await manager.initialize();await flush();const client=mocks.clients[0];
+    let release!:()=>void;const blocked=new Promise<void>(resolve=>{release=resolve;});const submit=client.submit.bind(client);
+    client.submit=vi.fn(async(item:any)=>{await blocked;return submit(item);});client.mutate=vi.fn(async()=>({status:'applied'}));
+    manager.setDraft('s','keep draft');await manager.send('s','waiting',undefined,{preserveDraft:true});await flush();
+    expect(manager.getState().outbox).toHaveLength(1);
+    await expect(manager.setConversationMode('s',{model:'gpt-6-luna',provider:'openai-codex',reasoning:'none'})).rejects.toThrow('pending messages');
+    expect(client.mutate).not.toHaveBeenCalled();expect(manager.getState().drafts.s).toBe('keep draft');
+    release();await flush();expect(manager.getState().outbox).toHaveLength(0);manager.dispose();
+  });
+});
 const cachePayload = (value: string) => { const parsed = JSON.parse(value); return parsed.payload ?? parsed; };
 const flush = async () => { for (let n=0;n<10;n++) await new Promise(r => setTimeout(r,0)); };
 beforeEach(() => { mocks.saved=''; mocks.fail=false; mocks.clients=[]; mocks.secure.clear(); mocks.failConnect=false; mocks.failReplace=false; mocks.rejectReplace=false; mocks.replacements=[]; mocks.transcript=null; mocks.rejectSubmissionSession=''; mocks.listCalls=[]; mocks.storedRows=[]; mocks.blockWrite=null; mocks.writeHook=null; mocks.openHook=null; mocks.wire=[]; mocks.rows=null; mocks.connectHook=null; mocks.secureHook=null; mocks.listHook=null; mocks.readHook=null; mocks.ackReceipt={}; mocks.receiptResult={}; });

@@ -19,3 +19,9 @@ Read-only investigation identified the separate sibling Home Dashboard and its d
 On 18 November the owner authorized committing the reviewed baseline separately and continuing all phases after independent review/remediation. Baseline commit: `364006c`. Phase 0 is being committed separately against that baseline; no Phase 1 implementation has been made yet. Phase 1 source investigation is prepared; native-voice and credit-enforcement gates remain as described in the [primary plan](../../HERMES_ANDROID_CONVERSATIONAL_EXPERIENCE_PLAN.md).
 
 This record is an implementation checkpoint, not completion of the full roadmap or a tested release APK.
+
+## Phase 1 — conversation presets
+
+Implemented Fast/Balanced/Deep choices gated to enabled existing OpenAI-Codex catalog entries, authoritative Custom/current labeling and atomic per-session model+reasoning mutation. Existing advanced model/reasoning/favourite controls remain. Saved but unadmitted prompts prevent a preset change; no profile defaults/configuration changed.
+
+Independent GPT-6.1 Sol/xhigh review cleared v3 after two remediation cycles: initial preset confirmation locking/stale alerts and send-admission ordering, followed by shared ownership for existing advanced confirmations. Main passed the full host aggregate before repairs, then affected manager suite (109), preset helper suite (4), workspace types and whitespace checks after repairs; unchanged-module evidence was retained. See [mode behavior and limits](conversation-modes.md). No live provider/phone tests or speed improvement claim.

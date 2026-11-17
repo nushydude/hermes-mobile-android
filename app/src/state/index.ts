@@ -507,6 +507,9 @@ export class AppManager {
     await this.refreshSessions();
     return result;
   };
+  /** Serialize a preset mutation with durable sends at the endpoint boundary. */
+  setConversationMode = (sessionId:string, payload:{model:string;provider:string;reasoning:string;confirm?:string}) =>
+    this.queueForEndpoint(async () => {const epoch=this.endpointEpoch;if(this.state.outbox.some(item=>item.session_id===sessionId))throw new Error('Wait for pending messages to be admitted before changing mode.');const result=await this.mutate(sessionId,'model',payload);this.assertEndpointEpoch(epoch);return result;});
   request = async <T = any>(method: string, params: Record<string, unknown> = {}) => { const client = this.requireClient(); const epoch = this.endpointEpoch; const result = await client.request<T>(method, params); this.assertEndpointEpoch(epoch); return result; };
   respondNotificationApproval = async (data: Record<string, unknown>, choice: string) => {
     const deadline = Date.now() + 15000;

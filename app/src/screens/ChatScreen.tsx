@@ -1,4 +1,5 @@
 import { ReasoningPicker } from "../components/ReasoningPicker";
+import {conversationModes,currentConversationMode,modeAvailable,ModeConfirmationOwner,type ConversationMode} from '../components/conversationModes';
 import { Sheet } from "../components/Sheet";
 import { MessageInput } from "../components/MessageInput";
 import { MessageActionSheet, type MessageActionTarget } from "../components/MessageActionSheet";
@@ -426,13 +427,14 @@ export function ChatScreen() {
   const follow = useMemo(() => new FollowLatest(requestAnimationFrame, cancelAnimationFrame, () => list.current?.scrollToEnd({animated:false})), [id, endpointEpoch]);
   useEffect(() => { setBottom(true); return () => follow.dispose(); }, [follow]);
   const submitFlight = useRef<object | null>(null);
-  const modelFlight = useRef<object | null>(null);
+  const modeConfirmation=useRef(new ModeConfirmationOwner());
+  const reasoningBusy=useRef(false);
   const settingsScope = useRef(0);
   useEffect(() => {
     setUploading(false);
     submitFlight.current = null;
     setSubmitting(false);
-    modelFlight.current = null; setModelBusy(false);
+    modeConfirmation.current.reset(); reasoningBusy.current=false; setModelBusy(false);
     setShowSavedText(false);
     setBottom(true);
     setVoice(null);
@@ -455,7 +457,7 @@ export function ChatScreen() {
     }).catch(() => { if (live && appManager.getEndpointEpoch() === endpointEpoch && appManager.getState().activeSessionId === id) setModelLoad("error"); });
     return () => { live = false; };
   }, [settings, id, endpointEpoch, modelRetry]);
-  function closeSettings() { settingsScope.current++; setSettings(false); }
+  function closeSettings() { settingsScope.current++; modeConfirmation.current.invalidate(); setSettings(false); }
   function openSettings() { settingsScope.current++; setModelSearch(""); setTitle(row?.title ?? ""); setSettings(true); }
   function assertEndpoint() { appManager.assertEndpointEpoch(endpointEpoch); }
   function assertAttachmentScope() {
@@ -795,17 +797,20 @@ export function ChatScreen() {
       result?.status === "confirmation_required" &&
       typeof result.confirm === "string"
     ) {
+      const ticket=modeConfirmation.current.issue();
       Alert.alert(
         "Confirm model change",
         result.message ?? "Apply this model?",
         [
-          { text: "Cancel", style: "cancel" },
+          { text: "Cancel", style: "cancel", onPress:()=>{modeConfirmation.current.consume(ticket);} },
           {
             text: "Confirm",
-            onPress: () =>
-              settingsScope.current === scope && void changeModel(payload, result.confirm).catch((e) =>
-                Alert.alert("Could not change model", String(e)),
-              ),
+            onPress: () => {
+              if(!modeConfirmation.current.consume(ticket))return;
+              if(settingsScope.current!==scope || appManager.getEndpointEpoch()!==endpointEpoch || appManager.getState().activeSessionId!==id || reasoningBusy.current)return;
+              const flight=modeConfirmation.current.begin();if(!flight)return;setModelBusy(true);
+              void changeModel(payload,result.confirm).catch(()=>{if(settingsScope.current===scope && appManager.getEndpointEpoch()===endpointEpoch && appManager.getState().activeSessionId===id)Alert.alert("Could not change model","Please try again.");}).finally(()=>{if(modeConfirmation.current.finish(flight))setModelBusy(false);});
+            },
           },
         ],
       );
@@ -817,6 +822,27 @@ export function ChatScreen() {
           "The model will change on the next turn.",
         );
     }
+  }
+  async function applyConversationMode(mode:ConversationMode, confirm?:string):Promise<void> {
+    const scope=settingsScope.current;
+    assertAttachmentScope();
+    if(modelLoad!=='ready'||!modeAvailable(mode,options))throw new Error('This mode is unavailable.');
+    const result=await appManager.setConversationMode(id,{model:mode.model,provider:mode.provider,reasoning:mode.reasoning,...(confirm?{confirm}:{})});
+    assertAttachmentScope();
+    if(settingsScope.current!==scope)return;
+    if(result?.status==='confirmation_required'){
+      if(typeof result.confirm!=='string')throw new Error('Model confirmation unavailable.');
+      const ticket=modeConfirmation.current.issue();
+      Alert.alert('Confirm mode change',typeof result.confirm_message==='string'?result.confirm_message:'Apply this mode?',[
+        {text:'Cancel',style:'cancel',onPress:()=>{modeConfirmation.current.consume(ticket);}},
+        {text:'Confirm',onPress:()=>{
+          if(!modeConfirmation.current.consume(ticket))return;
+          if(settingsScope.current!==scope || appManager.getEndpointEpoch()!==endpointEpoch || appManager.getState().activeSessionId!==id || reasoningBusy.current)return;
+          const flight=modeConfirmation.current.begin();if(!flight)return;setModelBusy(true);
+          void applyConversationMode(mode,result.confirm as string).catch(()=>{if(settingsScope.current===scope && appManager.getEndpointEpoch()===endpointEpoch && appManager.getState().activeSessionId===id)Alert.alert('Could not change mode','Please check pending messages and try again.');}).finally(()=>{if(modeConfirmation.current.finish(flight))setModelBusy(false);});
+        }},
+      ]);
+    } else if(result?.status==='deferred') Alert.alert('Mode change queued',`${mode.label} will apply after the current turn.`);
   }
   return (
     <KeyboardAvoidingView
@@ -847,7 +873,7 @@ export function ChatScreen() {
               {row?.title || "Chat"}
             </Text>
             <Text numberOfLines={1} style={ui.muted}>
-              {row?.model || "Default model"}
+              {currentConversationMode(chat?.snapshot?.info)} · {row?.model || "Default model"}
               {chat?.running && state.connection === "ready" ? " · Running" : ""} ▾
             </Text>
           </Pressable>
@@ -1175,16 +1201,24 @@ export function ChatScreen() {
                   .catch(() => { if (settingsScope.current === scope) Alert.alert("Could not rename", "Please try again."); });
               }}
             />
+            <Text style={ui.label}>Conversation mode</Text>
+            <Text style={ui.muted}>Current: {currentConversationMode(chat?.snapshot?.info)}. Modes apply to this shared chat.</Text>
+            <View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>{conversationModes.map(mode=><Button key={mode.label} secondary label={mode.label} disabled={modelBusy||modelLoad!=='ready'||!modeAvailable(mode,options)} onPress={()=>{
+              if(reasoningBusy.current||modeConfirmation.current.busy())return;modeConfirmation.current.invalidate();const flight=modeConfirmation.current.begin(),scope=settingsScope.current;if(!flight)return;setModelBusy(true);
+              void applyConversationMode(mode).catch(()=>{if(settingsScope.current===scope&&appManager.getEndpointEpoch()===endpointEpoch&&appManager.getState().activeSessionId===id)Alert.alert('Could not change mode',appManager.getState().outbox.some(item=>item.session_id===id)?'Wait for pending messages to be admitted before changing mode.':'Please check the connection and try again.');}).finally(()=>{if(modeConfirmation.current.finish(flight))setModelBusy(false);});
+            }}/>)}</View>
+            <Text style={ui.muted}>Unavailable modes need an available model in your existing Codex access. Advanced choices remain below.</Text>
             <Text style={ui.muted}>Current: {currentModel || row?.model || "Gateway default"}</Text>
             <ModelPicker options={options} selected={model} onSelect={setModel} query={modelSearch} onQuery={setModelSearch} state={modelLoad} retry={() => setModelRetry(n => n + 1)} defaultLabel="Current model" />
             <Button label={modelBusy ? "Changing model…" : "Set model"} secondary disabled={!model || model.disabled || modelBusy || modelLoad !== "ready"} onPress={() => {
-              if (!model || model.disabled || modelFlight.current) return;
-              const flight = {}, scope = settingsScope.current; modelFlight.current = flight; setModelBusy(true);
+              if (!model || model.disabled || reasoningBusy.current || modeConfirmation.current.busy()) return;
+              modeConfirmation.current.invalidate();
+              const flight = modeConfirmation.current.begin(), scope = settingsScope.current; if(!flight)return; setModelBusy(true);
               void changeModel({model:model.model, provider:model.provider}).catch(() => {
                 if (settingsScope.current === scope && appManager.getEndpointEpoch() === endpointEpoch && appManager.getState().activeSessionId === id) Alert.alert("Could not change model", "Please check the connection and try again.");
-              }).finally(() => { if (modelFlight.current === flight) {modelFlight.current = null; setModelBusy(false);} });
+              }).finally(() => { if (modeConfirmation.current.finish(flight)) setModelBusy(false); });
             }} />
-            <ReasoningPicker key={`${endpointEpoch}:${id}`} sessionId={id} endpointEpoch={endpointEpoch} disabled={modelBusy} onBusyChange={busy=>{if(appManager.getEndpointEpoch()===endpointEpoch&&appManager.getState().activeSessionId===id)setModelBusy(busy);}} />
+            <ReasoningPicker key={`${endpointEpoch}:${id}`} sessionId={id} endpointEpoch={endpointEpoch} disabled={modelBusy} onBusyChange={busy=>{if(appManager.getEndpointEpoch()===endpointEpoch&&appManager.getState().activeSessionId===id){reasoningBusy.current=busy;if(busy)modeConfirmation.current.invalidate();setModelBusy(busy);}}} />
           </ScrollView>
       </Sheet>
     </KeyboardAvoidingView>
