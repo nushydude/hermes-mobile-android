@@ -39,8 +39,10 @@ checks + 2 plugin checks + 5 JVM checks = 301 distinct checks**, not 301 physica
 state manager; see [the benchmark guide](../tools/bench/README.md). It needs no phone. Phone
 captures add frame times and the app's own timings. They need an owner-authorized Preview install.
 
-1. In Home settings, turn on **Collect response timings**. It is memory-only and off after every
-   app start, so the cold-start `cache_restore_ms` sample is not captured this way.
+1. In Home settings, turn on **Collect response timings**. The switch is remembered across
+   restarts (the timings are not), so to capture `cache_restore_ms` and the first
+   `connect_ready_ms`, force-stop and reopen the app with it on. Changing gateway clears timings
+   and pauses collection until the next start or toggle.
 2. Before each scenario, reset frame statistics:
    `adb shell dumpsys gfxinfo net.taild39a23.hermesmobile reset`
 3. Run one scenario, then save

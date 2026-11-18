@@ -46,6 +46,14 @@ export function useMonitorMode() {
   return useSyncExternalStore(subscribeMonitorMode, getMonitorMode, () => "off" as MonitorMode);
 }
 
+// Only the opt-in choice is stored; the timings themselves stay in memory.
+export function getCollectTimings() {
+  return readPreference("collect_timings") === "1";
+}
+export function setCollectTimings(value: boolean) {
+  writePreference("collect_timings", value ? "1" : "0");
+}
+
 // Unset retains the pre-existing behavior: voice replies spoken, typed replies silent.
 const speakRow = readPreference("speak_replies");
 let speakReplies: boolean | null = speakRow === "1" ? true : speakRow === "0" ? false : null;

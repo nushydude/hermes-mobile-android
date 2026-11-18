@@ -3,6 +3,13 @@ import { registerRootComponent } from "expo";
 
 import App from "./App";
 import { registerNotifications } from "./src/notifications";
+import { conversationDiagnostics } from "./src/state/conversationDiagnostics";
+import { getCollectTimings } from "./src/preferences";
+
+// Before anything can start the state manager, so cache_restore_ms covers the cold start.
+try {
+  conversationDiagnostics.setEnabled(getCollectTimings());
+} catch {}
 
 registerNotifications();
 

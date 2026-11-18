@@ -21,6 +21,7 @@ import {
   useMonitorMode,
   useSpeakReplies,
   setSpeakReplies,
+  setCollectTimings,
 } from "../preferences";
 import {
   requestNotificationPermission,
@@ -773,14 +774,21 @@ export function HomeScreen({ onSetup }: { onSetup: () => void }) {
               accessibilityLabel="Collect response timings"
               value={timingEnabled}
               onValueChange={(value) => {
+                // Apply first: turning off must clear collected timings even if saving fails.
                 conversationDiagnostics.setEnabled(value);
                 setTimingEnabled(value);
+                try {
+                  setCollectTimings(value);
+                } catch {
+                  Alert.alert("Could not save setting", "It applies until the app restarts.");
+                }
               }}
             />
           </View>
           <Text style={ui.muted}>
-            Timings are stored only in memory and contain elapsed stages, durations, save sizes and
-            render counts, not conversation text. Turning this off clears them.
+            The switch is remembered after a restart. Timings stay in memory only and contain
+            elapsed stages, durations, save sizes and render counts, not conversation text. Turning
+            this off clears them.
           </Text>
           {timingEnabled && (
             <Button
