@@ -79,9 +79,9 @@ measurement.
 
 | # | Finding | Evidence | Felt as |
 | --- | --- | --- | --- |
-| 1 | The whole app state is serialized into one SQLite row on hot paths. | `persist()` at `state/index.ts:103-119` stringifies every session row and every cached chat. `scheduleCache()` (`:145`) fires it every 500 ms while events arrive. The earlier audit's own fixture puts one full payload at about 1.7 MB with eight cached chats (137,326,080 bytes over 80 writes). | Stutter while a reply streams; slow send; slow chat open. |
+| 1 | The whole app state is serialized into one SQLite row on hot paths. | `persist()` at `state/index.ts:103-119` stringifies every session row and every cached chat. `scheduleCache()` (`:145`) fires it every 500 ms while events arrive. The earlier audit's own fixture puts one full payload at about 1.7 MB with eight cached chats of 100 rows (137,326,080 bytes over 80 writes); with 50-row chats it is about 0.87 M characters. Every cached row is stored twice: `snapshotChat` keeps the snapshot, which holds its own `display_messages`, beside `messages`, so about half of each write is duplicate rows. | Stutter while a reply streams; slow send; slow chat open. |
 | 2 | Sending serializes the full state three times, two of them before the request leaves. | `sendWork` awaits `persist()` (`:480`), then `client.submit` calls `persistSubmission` which awaits `persist()` again (`:300`, `client.ts:652`), then `acknowledgeSubmission` persists a third time (`:301`). | Delay between tapping Send and the turn starting. |
-| 3 | Opening a chat waits for a full persist before asking the gateway for the session. | `openSession` at `state/index.ts:442`: `await this.persist()` precedes `client.openSession`. | Delay before fresh history appears. |
+| 3 | Opening a chat runs a full persist first. Only for chats outside the eight recent ones does that delay the gateway request. | `openSession` at `state/index.ts:442`: `await this.persist()` precedes `client.openSession`. On reconnect, `reopen()` attaches all recent sessions, so for those `client.openSession` returns the held snapshot without sending `session.resume`; the persist then costs JS-thread serialization during the open, not a delayed request. | Delay before fresh history appears in chats outside the recent eight; a busy JS thread while any chat opens. |
 | 4 | The streaming reply is re-parsed as Markdown from the start on every 50 ms flush. | Events flush every 50 ms (`:297`, `:319-327`). `ChatScreen.tsx:668-676` builds a new live item object each time, so `Message` re-renders and `react-native-markdown-display` re-parses the entire growing text. `extractImages` also re-scans it (`:133`). Cost grows quadratically with reply length. | Frame drops that get worse the longer the reply. |
 | 5 | Every keystroke re-renders the entire chat screen. | The draft lives in the global store. `ChatScreen.tsx:418` selects `s.drafts`, and `MessageInput` is controlled by it (`:1204`). Each key press: store update, full `ChatScreen` render, a draft SQLite write (`:444`), and a debounced slash-completion effect. | Typing lag, worst in long chats. |
 | 6 | `ChatScreen` subscribes to more than it shows. | Same selector takes all `sessions`, `outbox` and `queuedEdits`. A flag change on any other session re-renders the open chat. | Background jank while other sessions run. |
@@ -91,6 +91,15 @@ measurement.
 | 10 | Every voice turn pays fixed waits. | 500 ms calibration and 1,300 ms end-of-speech silence (`voiceActivity.ts:10`), 400 ms cooldown (`voiceController.ts:71`), a permission call and recorder prepare per turn, and TTS starts only after the full reply with a first section of up to 320 characters (`voiceText.ts:28`). | Slow conversational rhythm. |
 | 11 | Images travel and live as base64 strings. | Picker requests `base64: true` for up to ten originals (`ChatScreen.tsx:561-571`) with no downscaling; uploads are JSON data URLs (`state/index.ts:646`). Tool images are fetched as data URLs and kept in a JS-heap cache (`:601-614`, `imageReads.ts`). | Slow attach, memory pressure, slow image display. |
 | 12 | A configured user sees the setup form at launch. | `App.tsx:42` renders `SetupScreen` while `credentialsConfigured` is still false, which is the case until `init()` finishes reading SQLite and SecureStore. | A flash of the wrong screen on cold start. |
+
+**Host benchmark check (`npm run bench`, WP-0.2).** Counts, not phone measurements. Findings 1, 2
+and 4 hold as written. One streamed 4,000-character reply serializes about 18.4 M characters
+(21 full writes) when deltas arrive 100 ms apart, against 2.6 M for a whole send, so finding 1's
+streaming writes are the largest serialization cost. Writes scale with how long the reply streams,
+about two per second. Finding 4's "roughly 200,000" parse input is exact when every delta lands
+in its own 50 ms flush and falls to 66,000 when deltas arrive 20 ms apart. Finding 3 is corrected
+above. For finding 5 the re-render holds by reading the selector, but the per-keystroke SQLite
+write is a draft checkpoint of about 130 characters, not a full persist.
 
 Two findings that are not performance but should be fixed in the same pass:
 
@@ -139,7 +148,10 @@ Two findings that are not performance but should be fixed in the same pass:
 
 ## Phase 1: hot paths
 
-Do these in order. WP-1.1 and WP-1.2 are small and should land before the larger WP-1.3.
+Do these in order, with one exception: land WP-1.2 before WP-1.1, because the host benchmark puts
+streaming writes at about seven times the serialization of a send. WP-1.1 and WP-1.2 are small and
+should land before the larger WP-1.3. In WP-1.1, step 2 carries most of the value; step 1 only
+helps chats outside the recent eight (finding 3).
 
 ### WP-1.1 Stop blocking the network on full persists
 
@@ -170,6 +182,9 @@ Do these in order. WP-1.1 and WP-1.2 are small and should land before the larger
   1. First establish whether cold-start recovery depends on a persisted `liveText` or `blocks`.
      Read `snapshotChat` (`reducer.ts:31-37`) and the recovery tests. If nothing depends on it,
      exclude `liveText` and `blocks` of running chats from the payload. If something does, keep them.
+     In the same pass, check whether restore needs the snapshot's own copy of the transcript rows
+     (`snapshot.display_messages`, duplicated in `messages`; see finding 1). If not, persisting the
+     snapshot without them roughly halves every full write.
   2. Change `scheduleCache` so that changes caused only by `message.delta` and activity events use a
      long interval (3 to 5 s), while structural changes (snapshot, `message.complete`, prompts,
      transcript refresh, session flags) keep 500 ms. A pending long timer must be shortened when a
@@ -526,7 +541,7 @@ mitigation is noted.
 
 1. WP-6.1's Prettier commit on its own. Then WP-6.1's ESLint step, WP-0.1 and WP-0.2. Baseline
    capture on the phone.
-2. WP-1.1, WP-1.2, WP-4.1, WP-4.2. Small, high-value, low conflict.
+2. WP-1.2, WP-1.1, WP-4.1, WP-4.2. Small, high-value, low conflict.
 3. WP-1.4, WP-1.5, WP-1.6. The chat screen work; do them serially, since all three edit
    `ChatScreen.tsx`.
 4. WP-1.3 with WP-6.2, then feature 1 (instant open).
