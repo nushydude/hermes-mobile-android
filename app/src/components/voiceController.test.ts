@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { VoiceController, DefiniteVoiceSendError, type VoiceAdapters } from './voiceController';
 import { VoiceCorrelation } from './voiceCorrelation';
+import { registerVoiceCleanup, waitVoiceCleanup } from './voiceAudioMode';
 function deferred<T>() { let resolve!:(v:T)=>void; const promise=new Promise<T>(r=>{resolve=r;}); return {promise,resolve}; }
 function fixture() {
  let valid=true;
@@ -228,4 +229,39 @@ it('muting an active automatic reply pauses until explicit resume',async()=>{
   pending.resolve('finished');await reply;await vi.advanceTimersByTimeAsync(1000);expect(f.adapter.start).toHaveBeenCalledTimes(1);
   f.controller.resume();await vi.advanceTimersByTimeAsync(0);expect(f.adapter.start).toHaveBeenCalledTimes(2);f.controller.end();
  }finally{vi.useRealTimers();}
+});
+
+
+it('interrupts playback before starting capture and ignores late playback completion',async()=>{
+ const f=fixture(), playback=deferred<void>(), cleanup=deferred<void>();
+ f.adapter.play=vi.fn(()=>playback.promise);
+ f.controller.startConversation(); await vi.waitFor(()=>expect(f.controller.getState().phase).toBe('recording'));
+ await f.controller.stop(); await vi.waitFor(()=>expect(f.controller.getState().phase).toBe('sent'));
+ const speaking=f.controller.reply('answer'); await vi.waitFor(()=>expect(f.controller.getState().phase).toBe('playing'));
+ f.adapter.discard=vi.fn(()=>cleanup.promise); const previous=(f.adapter.stopPlayback as ReturnType<typeof vi.fn>).mock.calls.length;
+ f.controller.interruptAndSpeak(); expect((f.adapter.stopPlayback as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(previous);
+ expect(f.controller.getState().phase).toBe('permission'); playback.resolve();await speaking;
+ expect(f.adapter.start).toHaveBeenCalledTimes(1);cleanup.resolve();await vi.waitFor(()=>expect(f.adapter.start).toHaveBeenCalledTimes(2));f.controller.end();
+});
+
+it('sends room images once through the correlated voice turn and speaks its reply',async()=>{
+ const f=fixture(), saved=deferred<void>();f.adapter.send=vi.fn(()=>saved.promise);f.controller.startConversation();await vi.waitFor(()=>expect(f.controller.getState().phase).toBe('recording'));f.controller.pause();await f.controller.waitForCleanup();
+ const first=f.controller.sendImages([{path:'B',mime:'image/jpeg'}]);const second=await f.controller.sendImages([{path:'B',mime:'image/jpeg'}]);expect(second).toBe(false);expect(f.adapter.send).toHaveBeenCalledTimes(1);
+ expect(f.adapter.send).toHaveBeenCalledWith('',expect.any(Function),[{path:'B',mime:'image/jpeg'}]);saved.resolve();expect(await first).toBe(true);await f.controller.reply('answer');expect(f.adapter.play).toHaveBeenCalledWith('answer',expect.any(AbortSignal));f.controller.end();
+});
+
+it('blocks the next controller until a previous late prepare has drained',async()=>{
+ const old=fixture(),next=fixture(),prepare=deferred<void>();old.adapter.prepare=vi.fn(()=>prepare.promise);
+ next.adapter.prepare=vi.fn(async()=>{await waitVoiceCleanup();});
+ old.controller.startConversation();await vi.waitFor(()=>expect(old.adapter.prepare).toHaveBeenCalled());registerVoiceCleanup(old.controller.end());
+ next.controller.startConversation();await Promise.resolve();expect(next.adapter.start).not.toHaveBeenCalled();prepare.resolve();await vi.waitFor(()=>expect(next.adapter.start).toHaveBeenCalledTimes(1));next.controller.end();
+});
+it('settles a terminal turn while backgrounded without playback or automatic rearm',async()=>{
+ let foreground=true;const f=fixture();f.adapter.valid=()=>foreground;f.controller.startConversation();await vi.waitFor(()=>expect(f.controller.getState().phase).toBe('recording'));await f.controller.stop();
+ foreground=false;f.controller.pause();f.controller.settle(()=>true,'empty');expect(f.controller.hasPending()).toBe(false);expect(f.adapter.play).not.toHaveBeenCalled();expect(f.controller.getState().phase).toBe('paused');foreground=true;f.controller.resume();await vi.waitFor(()=>expect(f.controller.getState().phase).toBe('recording'));f.controller.end();
+});
+
+it('waits for no-speech cleanup before allowing a handoff',async()=>{
+ vi.useFakeTimers();try{const f=fixture(),cleanup=deferred<void>();f.adapter.discard=vi.fn(()=>cleanup.promise);f.controller.startConversation();for(let i=0;i<8;i++)await Promise.resolve();expect(f.controller.getState().phase).toBe('recording');
+ await vi.advanceTimersByTimeAsync(60000);expect(f.adapter.discard).toHaveBeenCalled();f.controller.pause();let drained=false;void f.controller.waitForCleanup().then(()=>{drained=true;});await Promise.resolve();expect(drained).toBe(false);cleanup.resolve();await f.controller.waitForCleanup();expect(drained).toBe(true);f.controller.end();}finally{vi.useRealTimers();}
 });

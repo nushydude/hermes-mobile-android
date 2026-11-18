@@ -2,6 +2,7 @@ import { ReasoningPicker } from "../components/ReasoningPicker";
 import {conversationModes,currentConversationMode,modeAvailable,ModeConfirmationOwner,type ConversationMode} from '../components/conversationModes';
 import { Sheet } from "../components/Sheet";
 import { MessageInput } from "../components/MessageInput";
+import { composerActions } from "../components/composerActions";
 import { MessageActionSheet, type MessageActionTarget } from "../components/MessageActionSheet";
 import { appendQuote, findLoadedMessages, highlightParts, measuredSearchHop, nextMatchKey } from "../components/chatActions";
 import { actionHaptic } from "../components/haptics";
@@ -31,7 +32,7 @@ import { colors } from "../theme";
 import { Button, Card, ui } from "../components/UI";
 import { parseSlash, modelPayload } from "../components/slash";
 import { extractImages } from "../components/images";
-import { setShowActivity, useShowActivity, getSpeakReplies, setSpeakReplies, useSpeakReplies, subscribeSpeakReplies } from "../preferences";
+import { setShowActivity, useShowActivity, getSpeakReplies, subscribeSpeakReplies } from "../preferences";
 import {
   showActivityEvent,
   showHistoryMessage,
@@ -46,6 +47,10 @@ import { speechParts, speechText } from '../components/voiceText';
 import { TypedSpeechWatcher } from '../components/typedSpeechWatcher';
 import { conversationDiagnostics } from '../state/conversationDiagnostics';
 import { VoiceSheet } from "../components/VoiceSheet";
+import { consumeVoiceEntry, subscribeVoiceEntry } from "../components/newSessionIntent";
+import { VoiceEntryTransaction } from "../components/voiceEntryTransaction";
+import { VoiceCreateFlights } from "../components/voiceCreateFlights";
+import { addRoomImages, visibleRoomImages, type RoomImages } from "../components/roomImages";
 import { TaskTray } from '../components/TaskTray';
 import { TaskRequestFences } from '../components/taskRequestFence';
 import { taskStore } from '../state/taskStore';
@@ -407,9 +412,9 @@ function Prompt({ value, id }: { value: unknown; id: string }) {
 type Attachment = { uri: string; path: string; mime: string };
 export function ChatScreen() {
   const endpointEpoch = appManager.getEndpointEpoch();
+  const navigationRevision = appManager.getNavigationRevision();
   const connectionGrace = useConnectionGrace();
   const showActivity = useShowActivity();
-  const speakReplies = useSpeakReplies();
   const state = useAppStore(s => ({activeSessionId:s.activeSessionId,chat:s.chats[s.activeSessionId!],sessions:s.sessions,drafts:s.drafts,outbox:s.outbox,queuedEdits:s.queuedEdits,connection:s.connection,error:s.error})),
     id = state.activeSessionId!,
     chat = state.chat,
@@ -417,11 +422,12 @@ export function ChatScreen() {
     draft = state.drafts[id] ?? "";
   const attachments=chat?.draftAttachments ?? [];
   const setAttachments=(value:Attachment[]|((current:Attachment[])=>Attachment[]))=>{assertEndpoint();const previous=appManager.getState().chats[id]?.draftAttachments ?? [];void appManager.setDraftAttachments(id,typeof value==='function'?value(previous):value).catch(()=>Alert.alert("Could not save draft images","Keep the app open and try again."));};
+  const [voiceImages,setVoiceImages]=useState<RoomImages|null>(null);
   const [uploading, setUploading] = useState(false),
     [submitting, setSubmitting] = useState(false),
     [bottom, setBottom] = useState(true),
     [settings, setSettings] = useState(false),
-    [voice, setVoice] = useState<{reply?:string;lease:SpeechLease} | null>(null),
+    [voice, setVoice] = useState<{reply?:string;lease:SpeechLease;sessionId:string;origin:string;epoch:number;revision:number;owner:SpeechOwner} | null>(null),
     [showSavedText, setShowSavedText] = useState(false),
     [title, setTitle] = useState(""),
     [model, setModel] = useState<ModelChoice | null>(null),
@@ -444,14 +450,14 @@ export function ChatScreen() {
   const selectTask=(child:string)=>{if(!taskCurrent())return;const token=taskResultRequest.current.begin();setTaskResult({id:child,text:'',loading:true,error:null});void appManager.request<{available?:boolean;rows?:unknown[]}>('session.transcript',{session_id:id,subagent_id:child,order:'latest',limit:50}).then(result=>{if(!taskCurrent()||!taskResultRequest.current.valid(token))return;setTaskResult({id:child,text:result.available===true && Array.isArray(result.rows)?result.rows.map(row=>text(obj(row).text ?? obj(row).content)).filter(Boolean).join('\n\n'):'',loading:false,error:result.available===true?null:'Transcript is unavailable.'});}).catch(()=>{if(taskCurrent()&&taskResultRequest.current.valid(token))setTaskResult({id:child,text:'',loading:false,error:'Could not load this transcript.'});});};
   const interruptTask=(child:string)=>{if(!taskCurrent())return;setTaskError(null);void taskStore.interrupt(origin,id,child,endpointEpoch).catch(()=>{if(taskCurrent())setTaskError('Could not request stop. Refresh to check the task.');});};
   useEffect(()=>{taskRefreshRequest.current.invalidate();taskResultRequest.current.invalidate();setTaskOpen(false);setTaskRefreshing(false);setTaskError(null);setTaskResult(null);},[origin,id,endpointEpoch]);
-  const speechOwner=useMemo(()=>new SpeechOwner(new VoicePlayback(nativeVoicePlayback((text,signal)=>appManager.speakAudio(text,signal,endpointEpoch),()=>AppState.currentState==='active' && appManager.getEndpointEpoch()===endpointEpoch && appManager.getConfiguredOrigin()===origin && appManager.getState().activeSessionId===id,()=>conversationDiagnostics.mark(playbackTrace.current,'playback_start')))),[id,endpointEpoch,origin]);
+  const speechOwner=useMemo(()=>new SpeechOwner(new VoicePlayback(nativeVoicePlayback((text,signal)=>appManager.speakAudio(text,signal,endpointEpoch),()=>AppState.currentState==='active' && appManager.getEndpointEpoch()===endpointEpoch && appManager.getNavigationRevision()===navigationRevision && appManager.getConfiguredOrigin()===origin && appManager.getState().activeSessionId===id,()=>conversationDiagnostics.mark(playbackTrace.current,'playback_start')))),[id,endpointEpoch,origin,navigationRevision]);
   const speechState=useSyncExternalStore(speechOwner.playback.subscribe,speechOwner.playback.getState,speechOwner.playback.getState);
   const typedLease=useRef<SpeechLease|null>(null), voiceLease=useRef<SpeechLease|null>(null);
   const speechWatches=useRef(new Set<()=>void>());
   useEffect(()=>()=>{for(const close of speechWatches.current)close();speechWatches.current.clear();speechOwner.dispose();typedLease.current=null;voiceLease.current=null;},[speechOwner]);
   useEffect(()=>{const stop=()=>{for(const close of speechWatches.current)close();typedLease.current?.release();typedLease.current=null;};const lifecycle=AppState.addEventListener('change',next=>{if(next!=='active')stop();});const unsubscribe=appManager.subscribe(()=>{if(appManager.getEndpointEpoch()!==endpointEpoch || appManager.getConfiguredOrigin()!==origin || appManager.getState().activeSessionId!==id)stop();});return()=>{lifecycle.remove();unsubscribe();};},[speechOwner]);
   useEffect(()=>subscribeSpeakReplies(()=>{if(getSpeakReplies()===false){for(const close of speechWatches.current)close();typedLease.current?.release();typedLease.current=null;}}),[speechOwner]);
-  const openVoice=(reply?:string)=>{typedLease.current?.release();typedLease.current=null;voiceLease.current?.release();const lease=speechOwner.acquire();voiceLease.current=lease;setVoice({reply,lease});};
+  const openVoice=(reply?:string)=>{typedLease.current?.release();typedLease.current=null;voiceLease.current?.release();const lease=speechOwner.acquire();voiceLease.current=lease;setVoiceImages({owner:lease,images:[]});setVoice({reply,lease,sessionId:id,origin,epoch:endpointEpoch,revision:navigationRevision,owner:speechOwner});};
   const closeVoice=(lease:SpeechLease)=>{lease.release();if(voiceLease.current===lease){voiceLease.current=null;setVoice(current=>current?.lease===lease?null:current);}};
   function watchTypedSend(){
     if(getSpeakReplies()!==true)return null;
@@ -467,12 +473,14 @@ export function ChatScreen() {
   const list = useRef<FlatList>(null);
   const follow = useMemo(() => new FollowLatest(requestAnimationFrame, cancelAnimationFrame, () => list.current?.scrollToEnd({animated:false})), [id, endpointEpoch]);
   useEffect(() => { setBottom(true); return () => follow.dispose(); }, [follow]);
+  const newVoiceFlights=useRef(new VoiceCreateFlights());
   const submitFlight = useRef<object | null>(null);
   const modeConfirmation=useRef(new ModeConfirmationOwner());
   const reasoningBusy=useRef(false);
   const settingsScope = useRef(0);
   useEffect(() => {
     setUploading(false);
+    setVoiceImages(null);
     submitFlight.current = null;
     setSubmitting(false);
     modeConfirmation.current.reset(); reasoningBusy.current=false; setModelBusy(false);
@@ -482,7 +490,8 @@ export function ChatScreen() {
     closeSettings();
     setSuggestions([]);
     setActionTarget(null);setFindOpen(false);setFindQuery('');setFindKey(null);setFindError('');
-  }, [id, endpointEpoch]);
+  }, [id, endpointEpoch, navigationRevision]);
+  useEffect(()=>{const check=()=>{if(appManager.getNavigationRevision()===navigationRevision && consumeVoiceEntry(endpointEpoch,origin,id,navigationRevision))openVoice();};const unsub=subscribeVoiceEntry(check);check();return unsub;},[id,endpointEpoch,origin,navigationRevision,speechOwner]);
   useEffect(() => {
     if (!settings) return;
     let live = true;
@@ -503,7 +512,7 @@ export function ChatScreen() {
   function assertEndpoint() { appManager.assertEndpointEpoch(endpointEpoch); }
   function assertAttachmentScope() {
     assertEndpoint();
-    if (appManager.getState().activeSessionId !== id) throw new Error("Chat changed. Select the image again in the current chat.");
+    if (appManager.getNavigationRevision() !== navigationRevision || appManager.getState().activeSessionId !== id) throw new Error("Chat changed. Select the image again in the current chat.");
   }
   useEffect(() => {
     if (!draft.startsWith("/")) {
@@ -593,8 +602,10 @@ export function ChatScreen() {
         added.push({ uri, path: uploaded.path, mime: uploaded.mime });
       }
       setAttachments((old) => [...old, ...added]);
+      return added;
     } catch (e) {
       Alert.alert("Image upload failed", String(e));
+      return [];
     } finally {
       if (appManager.getEndpointEpoch() === endpointEpoch && appManager.getState().activeSessionId === id) setUploading(false);
     }
@@ -1189,18 +1200,16 @@ export function ChatScreen() {
           </View>
         )}
         <View style={{flexDirection:"row",alignItems:"flex-end",backgroundColor:colors.surface,borderRadius:28,minHeight:58,paddingHorizontal:4,paddingVertical:5}}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Take photo" disabled={uploading || !!chat?.sessionUnavailable} onPress={() => void attach(true).catch(e => Alert.alert("Could not attach image", String(e)))} style={{width:48,height:48,alignItems:"center",justifyContent:"center",opacity:uploading || chat?.sessionUnavailable ? 0.4 : 1}}><Ionicons name="camera-outline" size={23} color={colors.accent} /></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Attach photos" disabled={uploading || !!chat?.sessionUnavailable} onPress={() => void attach(false).catch(e => Alert.alert("Could not attach image", String(e)))} style={{width:48,height:48,alignItems:"center",justifyContent:"center",opacity:uploading || chat?.sessionUnavailable ? 0.4 : 1}}><Ionicons name="attach" size={23} color={colors.accent} /></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Talk in this chat" disabled={!!chat?.sessionUnavailable} onPress={() => openVoice()} style={{width:48,height:48,alignItems:"center",justifyContent:"center",opacity:chat?.sessionUnavailable?0.4:1}}><Ionicons name="mic-outline" size={22} color={colors.accent} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Add image" disabled={uploading || !!chat?.sessionUnavailable} onPress={()=>Alert.alert("Add image", "Choose a source",[{text:"Cancel",style:"cancel"},{text:"Camera",onPress:()=>void attach(true).catch(e=>Alert.alert("Could not attach image",String(e)))},{text:"Photos",onPress:()=>void attach(false).catch(e=>Alert.alert("Could not attach image",String(e)))}])} style={{width:48,height:48,alignItems:"center",justifyContent:"center",opacity:uploading || chat?.sessionUnavailable ? 0.4 : 1}}><Ionicons name="add" size={26} color={colors.accent} /></Pressable>
           <MessageInput key={`${endpointEpoch}:${id}`} value={draft} onChangeText={(t) => appManager.setDraft(id,t)} />
-          <Pressable accessibilityRole="button" accessibilityLabel={chat?.running ? "Queue message" : "Send message"} disabled={uploading || submitting || !!chat?.sessionUnavailable || (!draft.trim() && !attachments.length)} onPress={startSubmit} style={{width:48,height:48,borderRadius:24,alignItems:"center",justifyContent:"center",backgroundColor:colors.accent,opacity:uploading || submitting || chat?.sessionUnavailable || (!draft.trim() && !attachments.length) ? 0.4 : 1}}><Ionicons name="send" size={21} color={colors.ink} /></Pressable>
+          {composerActions(draft,attachments.length).showVoice && <Pressable accessibilityRole="button" accessibilityLabel="Talk in this chat" disabled={!!chat?.sessionUnavailable} onPress={() => openVoice()} style={{width:48,height:48,alignItems:"center",justifyContent:"center",opacity:chat?.sessionUnavailable?0.4:1}}><Ionicons name="pulse-outline" size={22} color={colors.accent} /></Pressable>}
+          {composerActions(draft,attachments.length).showSend && <Pressable accessibilityRole="button" accessibilityLabel={chat?.running ? "Queue message" : "Send message"} disabled={uploading || submitting || !!chat?.sessionUnavailable || (!draft.trim() && !attachments.length)} onPress={startSubmit} style={{width:48,height:48,borderRadius:24,alignItems:"center",justifyContent:"center",backgroundColor:colors.accent,opacity:uploading || submitting || chat?.sessionUnavailable || (!draft.trim() && !attachments.length) ? 0.4 : 1}}><Ionicons name="send" size={21} color={colors.ink} /></Pressable>}
         </View>
       </View>
       <MessageActionSheet key={`${endpointEpoch}:${id}`} target={actionTarget} onClose={()=>setActionTarget(null)} onQuote={onQuote} onRead={onReadReply} isCurrent={isCurrentChat} />
       <TaskTray key={`${origin}:${endpointEpoch}:${id}`} visible={taskOpen} scope={JSON.stringify([origin,endpointEpoch,id])} tasks={tasks} refreshing={taskRefreshing} error={taskError} result={taskResult} onClose={()=>{taskRefreshRequest.current.invalidate();taskResultRequest.current.invalidate();setTaskOpen(false);setTaskRefreshing(false);setTaskResult(null);}} onRefresh={refreshTasks} onSelect={selectTask} onInterrupt={interruptTask} />
-      <Button secondary label={`Speak replies: ${speakReplies===null?'Off for typed':speakReplies?'On':'Off'}`} onPress={()=>{const next=speakReplies!==true;setSpeakReplies(next);if(!next){for(const close of speechWatches.current)close();typedLease.current?.release();typedLease.current=null;}}} />
       {typedLease.current?.owns() && speechState.phase!=='idle' && <View style={{flexDirection:'row',gap:8}}><Text style={ui.muted}>Speaking reply</Text><Button secondary label={speechState.phase==='paused'?'Resume':'Pause'} onPress={()=>typedLease.current?.toggle()} /><Button secondary label="Stop" onPress={()=>{typedLease.current?.release();typedLease.current=null;}} /></View>}
-      {voice && <VoiceSheet sessionId={id} origin={appManager.getConfiguredOrigin()} endpointEpoch={endpointEpoch} title={row?.title || "Chat"} model={String(obj(chat?.snapshot?.info).model ?? row?.model ?? "Default model")} reasoning={String(obj(chat?.snapshot?.info).reasoning_effort ?? "Default reasoning")} reply={voice.reply} owner={speechOwner} lease={voice.lease} setPlaybackTrace={trace=>{playbackTrace.current=trace;}} onClose={()=>closeVoice(voice.lease)} />}
+      {voice && voice.sessionId===id && voice.origin===origin && voice.epoch===endpointEpoch && voice.revision===navigationRevision && voice.owner===speechOwner && <VoiceSheet sessionId={id} origin={appManager.getConfiguredOrigin()} endpointEpoch={endpointEpoch} navigationRevision={navigationRevision} title={row?.title || "Chat"} model={String(obj(chat?.snapshot?.info).model ?? row?.model ?? "Default model")} reasoning={String(obj(chat?.snapshot?.info).reasoning_effort ?? "Default reasoning")} reply={voice.reply} owner={speechOwner} lease={voice.lease} setPlaybackTrace={trace=>{playbackTrace.current=trace;}} onNewConversation={async()=>{if(appManager.getEndpointEpoch()!==endpointEpoch || appManager.getConfiguredOrigin()!==origin || appManager.getNavigationRevision()!==navigationRevision || appManager.getState().activeSessionId!==id)return;const scope=JSON.stringify([endpointEpoch,origin,id,navigationRevision]);let transaction:VoiceEntryTransaction;const flight=newVoiceFlights.current.begin(scope,()=>transaction?.owns() ?? false);if(!flight)return;transaction=new VoiceEntryTransaction(endpointEpoch,origin,()=>({epoch:appManager.getEndpointEpoch(),origin:appManager.getConfiguredOrigin(),revision:appManager.getNavigationRevision(),session:appManager.getState().activeSessionId}));let known:string|null=null;const valid=()=>transaction.owns() && appManager.getState().activeSessionId===id;const info=obj(chat?.snapshot?.info);try{const target=await appManager.createSession({...(row?.cwd?{cwd:row.cwd}:{}),...(typeof info.model==='string'?{model:info.model}:{}),...(typeof info.provider==='string'?{provider:info.provider}:{})},{valid,onCreated:value=>{known=value;},onActivated:transaction.activated});transaction.publish(target);}catch{const owns=newVoiceFlights.current.current(flight);transaction.cancel();if(!owns)return;if(known){const target=known;Alert.alert('Chat created','The new chat could not be opened.',[{text:'Later',style:'cancel'},{text:'Open voice',onPress:()=>{if(!transaction.owns() || ![id,target].includes(appManager.getState().activeSessionId ?? ''))return;const retry=new VoiceEntryTransaction(endpointEpoch,origin,()=>({epoch:appManager.getEndpointEpoch(),origin:appManager.getConfiguredOrigin(),revision:appManager.getNavigationRevision(),session:appManager.getState().activeSessionId}));void appManager.openSession(target,{valid:retry.owns,onActivated:retry.activated}).then(resolved=>{retry.publish(resolved ?? target);}).catch(()=>{const current=retry.owns();retry.cancel();if(current)Alert.alert('Could not open chat','Find the created chat in the chat list.');});}}]);}else{newVoiceFlights.current.markUnknown(flight);Alert.alert('Creation status unknown','Review the chat list before starting another conversation. A chat may already have been created.');void appManager.refreshSessions().catch(()=>{});}}finally{newVoiceFlights.current.finish(flight);}}} images={visibleRoomImages(voiceImages,voice.lease,attachments)} onAttach={async camera=>{const owner=voice.lease;const added=await attach(camera);if(added?.length)setVoiceImages(old=>addRoomImages(old,owner,added,voiceLease.current===owner && appManager.getEndpointEpoch()===endpointEpoch && appManager.getNavigationRevision()===navigationRevision && appManager.getState().activeSessionId===id));}} onRemoveImage={image=>{if(voiceLease.current!==voice.lease || appManager.getNavigationRevision()!==navigationRevision)return;setVoiceImages(old=>old?.owner===voice.lease?{...old,images:old.images.filter(x=>x.path!==image.path)}:old);setAttachments(old=>old.filter(x=>x.path!==image.path));}} onImagesSent={selected=>{if(voiceLease.current===voice.lease && appManager.getEndpointEpoch()===endpointEpoch && appManager.getNavigationRevision()===navigationRevision && appManager.getState().activeSessionId===id)setVoiceImages(old=>old?.owner===voice.lease?{...old,images:old.images.filter(image=>!selected.some(sent=>sent.path===image.path))}:old);}} onClose={()=>closeVoice(voice.lease)} />}
       <Sheet visible={settings} title="Chat settings" onClose={closeSettings} closeDisabled={modelBusy}>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 22, gap: 12 }}>
             {!!chat?.usage && !!formatUsage(chat.usage) && <Text style={ui.muted}>{formatUsage(chat.usage)}</Text>}

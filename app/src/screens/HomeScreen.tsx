@@ -14,12 +14,15 @@ import {
 import { appManager, useAppStore, type SessionRow } from "../state";
 import { colors } from "../theme";
 import { Button, Card, ui } from "../components/UI";
-import { setShowActivity, useShowActivity, setMonitorMode, useMonitorMode } from "../preferences";
+import { setShowActivity, useShowActivity, setMonitorMode, useMonitorMode, useSpeakReplies, setSpeakReplies } from "../preferences";
 import { requestNotificationPermission, getNotificationPermission, openNotificationSettings, getMonitorStatus, subscribeMonitorStatus } from "../notifications";
 import { notificationPermissionState, type PermissionState } from "../components/notificationPermission";
 import { Sheet } from "../components/Sheet";
+import { VoiceEntryTransaction } from "../components/voiceEntryTransaction";
 import { actionHaptic } from "../components/haptics";
 import * as Application from "expo-application";
+import * as Clipboard from "expo-clipboard";
+import { conversationDiagnostics } from "../state/conversationDiagnostics";
 import { ModelPicker, type LoadState } from "../components/ModelPicker";
 import { monitorStatusText } from "../components/monitorStatus";
 import { mobileModelChoices, recentWorkspaces, filterWorkspaces, workspaceName, type ModelChoice } from "../components/selections";
@@ -48,12 +51,15 @@ export function HomeScreen({ onSetup }: { onSetup: () => void }) {
   const draftImageKey = useAppStore(s => chatDraftKey(s.chats));
   const connectionGrace = useConnectionGrace();
   const showActivity = useShowActivity();
+  const speakReplies=useSpeakReplies();
+  const [timingEnabled,setTimingEnabled]=useState(()=>conversationDiagnostics.isEnabled());
   const monitorMode = useMonitorMode();
   const monitorState = useSyncExternalStore(subscribeMonitorStatus, getMonitorStatus, getMonitorStatus);
   const [settings, setSettings] = useState(false);
   const [permission, setPermission] = useState<PermissionState | null>(null);
   useEffect(() => {
     if (!settings) return;
+    setTimingEnabled(conversationDiagnostics.isEnabled());
     let live = true;
     const refresh = () => { void getNotificationPermission().then(result => { if (live) setPermission(notificationPermissionState(result.authorizationStatus)); }).catch(() => { if (live) setPermission(null); }); };
     refresh();
@@ -78,8 +84,10 @@ export function HomeScreen({ onSetup }: { onSetup: () => void }) {
   const [modelRetry, setModelRetry] = useState(0);
   const [createBusy, setCreateBusy] = useState(false);
   const createFlight = useRef<object | null>(null);
+  const createUncertain=useRef(false);
   const createScope = useRef<number | null>(null);
   const endpointEpoch = appManager.getEndpointEpoch();
+  const navigationRevision=appManager.getNavigationRevision();
   useEffect(() => { lookupGeneration.current++; foundEpoch.current=null; setFound(null); }, [endpointEpoch]);
   const workspaces = useMemo(() => recentWorkspaces(state.sessions), [state.sessions]);
   useEffect(() => {
@@ -96,6 +104,17 @@ export function HomeScreen({ onSetup }: { onSetup: () => void }) {
     return () => { live = false; };
   }, [creating, endpointEpoch, modelRetry]);
   function openCreate() { if (createFlight.current) return; createScope.current = appManager.getEndpointEpoch(); setCreatePanel("main"); setWorkspace(""); setWorkspaceSearch(""); setModel(null); setModelDefault(""); setModelSearch(""); setCreating(true); }
+  function startCreate(voice:boolean) {
+              if (createFlight.current || createUncertain.current || createScope.current !== appManager.getEndpointEpoch() || appManager.getNavigationRevision()!==navigationRevision || appManager.getState().activeSessionId!==null) return;
+              actionHaptic(); const flight = {}; createFlight.current = flight; setCreateBusy(true);
+              const epoch = createScope.current!, origin=appManager.getConfiguredOrigin(); let knownId:string|null=null;
+              const transaction=new VoiceEntryTransaction(epoch,origin,()=>({epoch:appManager.getEndpointEpoch(),origin:appManager.getConfiguredOrigin(),revision:appManager.getNavigationRevision(),session:appManager.getState().activeSessionId}));
+              const valid=()=>transaction.owns() && appManager.getState().activeSessionId===null;
+              void appManager.createSession({...(workspace ? {cwd:workspace} : {}), ...(model ? {model:model.model, provider:model.provider} : {})},{valid,onCreated:id=>{knownId=id;},onActivated:transaction.activated}).then(id => {
+                if(voice)transaction.publish(id);else transaction.cancel();
+                if (transaction.owns()) setCreating(false);
+              }).catch(() => { transaction.cancel();if (!transaction.owns())return; if(knownId){const target=knownId;Alert.alert("Chat created", "The chat was created but could not be opened.",[{text:"Later",style:"cancel"},{text:voice?"Open voice":"Open chat",onPress:()=>{if(!transaction.owns() || ![null,target].includes(appManager.getState().activeSessionId))return;const retry=new VoiceEntryTransaction(epoch,origin,()=>({epoch:appManager.getEndpointEpoch(),origin:appManager.getConfiguredOrigin(),revision:appManager.getNavigationRevision(),session:appManager.getState().activeSessionId}));void appManager.openSession(target,{valid:retry.owns,onActivated:retry.activated}).then(resolved=>{if(voice)retry.publish(resolved ?? target);else retry.cancel();}).catch(()=>{const owns=retry.owns();retry.cancel();if(owns)Alert.alert("Could not open chat","Find the created chat in the chat list.");});}}]);void appManager.refreshSessions().catch(()=>{});}else{createUncertain.current=true;Alert.alert("Creation status unknown", "Review the refreshed chat list before starting another conversation. A chat may already have been created.");void appManager.refreshSessions().catch(()=>{});} }).finally(() => { if (createFlight.current === flight) { createFlight.current = null; setCreateBusy(false); } });
+  }
   function closeCreate() { if (!createFlight.current) { createScope.current = null; setCreating(false); } }
   useEffect(() => { if (creating && createScope.current !== endpointEpoch) { createScope.current = null; setCreating(false); } }, [creating, endpointEpoch]);
 
@@ -292,6 +311,11 @@ export function HomeScreen({ onSetup }: { onSetup: () => void }) {
                 }}
               />
             </View>
+            <View style={[ui.row,{justifyContent:"space-between"}]}><Text style={[ui.text,{flex:1}]}>Read typed replies aloud</Text><Switch accessibilityLabel="Read typed replies aloud" value={speakReplies===true} onValueChange={value=>{try{setSpeakReplies(value);}catch(e){Alert.alert("Could not save setting",String(e));}}} /></View>
+            <Text style={ui.muted}>Voice conversations speak replies independently of this setting.</Text>
+            <View style={[ui.row,{justifyContent:"space-between"}]}><Text style={[ui.text,{flex:1}]}>Collect response timings</Text><Switch accessibilityLabel="Collect response timings" value={timingEnabled} onValueChange={value=>{conversationDiagnostics.setEnabled(value);setTimingEnabled(value);}} /></View>
+            <Text style={ui.muted}>Timings are stored only in memory and contain elapsed stages, not conversation text. Turning this off clears them.</Text>
+            {timingEnabled && <Button secondary label="Copy response timings" onPress={()=>{void Clipboard.setStringAsync(JSON.stringify(conversationDiagnostics.export())).catch(()=>Alert.alert("Could not copy timings"));}} />}
             <Text style={ui.text}>Background connection monitor: {monitorMode === "whileturnruns" ? "while a turn runs" : monitorMode}</Text>
             <Text accessibilityLiveRegion="polite" style={ui.muted}>{monitorStatusText[monitorState]}{monitorState === "running" || monitorState === "finishing" ? ` · ${state.connection === "ready" ? "Connected" : connectionMessage(state.connection)}` : ""}</Text>
             <View style={[ui.row, {flexWrap:"wrap"}]}>
@@ -315,15 +339,8 @@ export function HomeScreen({ onSetup }: { onSetup: () => void }) {
           <Text style={ui.muted}>Choose a workspace and model, or use the gateway defaults.</Text>
           <ChoiceCard disabled={createBusy} label="Workspace" value={workspace || "Gateway default workspace"} onPress={() => { actionHaptic(); setCreatePanel("workspace"); }} />
           <ChoiceCard disabled={createBusy} label="Model" value={model ? `${model.model} · ${model.providerName}` : modelDefault ? `Gateway default · ${modelDefault}` : "Gateway default model"} onPress={() => { actionHaptic(); setCreatePanel("model"); }} />
-            <Button label={createBusy ? "Starting…" : "Start chat"} disabled={createBusy} onPress={() => {
-              if (createFlight.current || createScope.current !== appManager.getEndpointEpoch()) return;
-              actionHaptic();
-              const flight = {}; createFlight.current = flight; setCreateBusy(true);
-              const epoch = createScope.current;
-              void appManager.createSession({...(workspace ? {cwd:workspace} : {}), ...(model ? {model:model.model, provider:model.provider} : {})}).then(() => {
-                if (appManager.getEndpointEpoch() === epoch) setCreating(false);
-              }).catch(() => { if (appManager.getEndpointEpoch() === epoch) Alert.alert("Could not create chat", "Please check the connection and try again."); }).finally(() => { if (createFlight.current === flight) { createFlight.current = null; setCreateBusy(false); } });
-            }} />
+            <View style={{flexDirection:"row",alignItems:"center",gap:10}}><View style={{flex:1}}><Button label={createBusy ? "Starting…" : "Start chat"} disabled={createBusy || createUncertain.current} onPress={()=>startCreate(false)} /></View><Pressable accessibilityRole="button" accessibilityLabel="Start voice conversation" accessibilityState={{disabled:createBusy || createUncertain.current}} disabled={createBusy || createUncertain.current} onPress={()=>startCreate(true)} style={{width:48,height:48,borderRadius:24,alignItems:"center",justifyContent:"center",backgroundColor:colors.raised,opacity:createBusy || createUncertain.current?0.5:1}}><Ionicons name="pulse-outline" size={23} color={colors.accent} /></Pressable></View>
+            {createUncertain.current && <Button secondary label="Review chat list" onPress={()=>{createUncertain.current=false;setCreating(false);}} />}
         </View> : createPanel === "workspace" ? <View style={{paddingHorizontal:24,paddingBottom:24,gap:12,flexShrink:1}}>
           <TextInput accessibilityLabel="Search recent workspaces" autoCapitalize="none" autoCorrect={false} value={workspaceSearch} onChangeText={setWorkspaceSearch} placeholder="Search recent workspaces" placeholderTextColor={colors.muted} style={ui.input} />
           <ScrollView keyboardShouldPersistTaps="handled" style={{maxHeight:360}}>

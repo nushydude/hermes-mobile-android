@@ -2,7 +2,7 @@
   "expo": {
     "name": "Hermes Mobile",
     "slug": "hermes-mobile",
-    "version": "0.3.2",
+    "version": "0.3.3",
     "scheme": "hermesmobile",
     "platforms": [
       "android"
@@ -12,7 +12,7 @@
     "userInterfaceStyle": "automatic",
     "android": {
       "package": "net.taild39a23.hermesmobile",
-      "versionCode": 9,
+      "versionCode": 10,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

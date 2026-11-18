@@ -17,6 +17,8 @@ vi.mock('@hermes-mobile/protocol', () => ({ randomUUID: () => crypto.randomUUID(
 vi.mock('../notifications', () => ({ notifyEvent: vi.fn(async () => {}), reconcileSnapshot: vi.fn(async () => {}) }));
 import { AppManager } from './index';
 import { conversationDiagnostics } from './conversationDiagnostics';
+import { VoiceEntryTransaction } from '../components/voiceEntryTransaction';
+import { consumeVoiceEntry } from '../components/newSessionIntent';
 
 describe('conversation mode mutation',()=>{
   it('keeps a send behind the atomic mode mutation while preserving the draft',async()=>{
@@ -1012,4 +1014,55 @@ it('records only the matching typed completion without exporting message content
   client.opts.onEvent(event); client.opts.onEvent(event); const result=conversationDiagnostics.export();
   expect(result.map(e=>e.stage)).toEqual(['submission_start','submission_saved','reply_complete']);
   expect(JSON.stringify(result)).not.toContain('private'); manager.dispose();
+});
+
+
+it('reports the created session before an open failure and never repeats creation',async()=>{
+ mocks.secure.set('hermes.baseUrl','https://example.test');mocks.secure.set('hermes.token','secret');
+ const manager=new AppManager();await manager.initialize();await flush();const client=mocks.clients[0];
+ client.createSession=vi.fn(async()=>({session_id:'created'}));mocks.openHook=async()=>{throw new Error('open failed');};
+ const receipt=vi.fn();await expect(manager.createSession({cwd:'/work'},{onCreated:receipt})).rejects.toThrow('open failed');
+ expect(receipt).toHaveBeenCalledWith('created');expect(client.createSession).toHaveBeenCalledTimes(1);manager.dispose();
+});
+it('returns the known created session if inventory refresh fails after open',async()=>{
+ mocks.secure.set('hermes.baseUrl','https://example.test');mocks.secure.set('hermes.token','secret');
+ const manager=new AppManager();await manager.initialize();await flush();const client=mocks.clients[0];client.createSession=vi.fn(async()=>({session_id:'created'}));
+ mocks.listHook=async()=>{throw new Error('inventory failed');};expect(await manager.createSession()).toBe('created');expect(client.createSession).toHaveBeenCalledTimes(1);manager.dispose();
+});
+
+it('atomically consumes only explicitly sent room images while preserving the typed draft',async()=>{
+ const manager=new AppManager();await manager.initialize();manager.setDraft('s','typed');
+ const image=(path:string)=>({path,mime:'image/jpeg',uri:path});
+ await manager.setDraftAttachments('s',[image('A'),image('B')]);
+ let release!:()=>void;const blocked=new Promise<void>(resolve=>{release=resolve;});mocks.blockWrite=()=>blocked;
+ const sending=manager.send('s','',[image('B')],{preserveDraft:true,consumeAttachments:true});
+ await vi.waitFor(()=>expect(manager.getState().outbox).toHaveLength(1));
+ const adding=manager.setDraftAttachments('s',[image('A'),image('C')]);release();await Promise.all([sending,adding]);
+ expect(manager.getState().drafts.s).toBe('typed');expect(manager.getState().chats.s.draftAttachments?.map(x=>x.path)).toEqual(['A','C']);
+ expect(manager.getState().outbox).toHaveLength(1);expect(manager.getState().outbox[0].attachments?.map(x=>x.path)).toEqual(['B']);
+ const saved=cachePayload(mocks.saved);expect(saved.chats.s.draftAttachments.map((x:any)=>x.path)).toEqual(['A','C']);manager.dispose();
+});
+it('keeps selected room images when the outbox checkpoint fails',async()=>{
+ const manager=new AppManager();await manager.initialize();await manager.setDraftAttachments('s',[{path:'B',mime:'image/jpeg',uri:'B'}]);mocks.fail=true;
+ await expect(manager.send('s','',[{path:'B',mime:'image/jpeg'}],{preserveDraft:true,consumeAttachments:true})).rejects.toThrow();
+ expect(manager.getState().chats.s.draftAttachments?.map(x=>x.path)).toEqual(['B']);expect(manager.getState().outbox).toHaveLength(0);manager.dispose();
+});
+
+function entryFor(manager:AppManager){const epoch=manager.getEndpointEpoch(),origin=manager.getConfiguredOrigin();return new VoiceEntryTransaction(epoch,origin,()=>({epoch:manager.getEndpointEpoch(),origin:manager.getConfiguredOrigin(),revision:manager.getNavigationRevision(),session:manager.getState().activeSessionId}));}
+it('does not publish a created voice destination after leaving it during inventory refresh',async()=>{
+ mocks.secure.set('hermes.baseUrl','https://example.test');mocks.secure.set('hermes.token','secret');const manager=new AppManager();await manager.initialize();await flush();const client=mocks.clients[0];client.createSession=vi.fn(async()=>({session_id:'created'}));
+ let release!:(v:any)=>void;const pending=new Promise<any>(resolve=>{release=resolve;});mocks.listHook=()=>pending;const tx=entryFor(manager);
+ const creating=manager.createSession({},{valid:tx.owns,onActivated:tx.activated});await vi.waitFor(()=>expect(manager.getState().activeSessionId).toBe('created'));manager.goHome();release({sessions:[]});const target=await creating;expect(tx.publish(target)).toBe(false);mocks.listHook=null;await manager.openSession('created');expect(consumeVoiceEntry(manager.getEndpointEpoch(),manager.getConfiguredOrigin(),'created',manager.getNavigationRevision())).toBe(false);manager.dispose();
+});
+it('rejects delayed creation after Home navigation ABA but allows its receipt',async()=>{
+ mocks.secure.set('hermes.baseUrl','https://example.test');mocks.secure.set('hermes.token','secret');const manager=new AppManager();await manager.initialize();await flush();const client=mocks.clients[0];
+ let release!:(v:any)=>void;client.createSession=vi.fn(()=>new Promise(resolve=>{release=resolve;}));const tx=entryFor(manager),receipt=vi.fn();const creating=manager.createSession({},{valid:tx.owns,onCreated:receipt,onActivated:tx.activated});await manager.openSession('other');manager.goHome();release({session_id:'created'});await expect(creating).rejects.toThrow('cancelled');expect(receipt).toHaveBeenCalledWith('created');expect(manager.getState().activeSessionId).toBeNull();expect(tx.owns()).toBe(false);tx.cancel();manager.dispose();
+});
+it('publishes exactly once after its own manager activation and refresh',async()=>{
+ mocks.secure.set('hermes.baseUrl','https://example.test');mocks.secure.set('hermes.token','secret');const manager=new AppManager();await manager.initialize();await flush();mocks.clients[0].createSession=vi.fn(async()=>({session_id:'created'}));const tx=entryFor(manager);const target=await manager.createSession({},{valid:tx.owns,onActivated:tx.activated});expect(tx.publish(target)).toBe(true);const args=[manager.getEndpointEpoch(),manager.getConfiguredOrigin(),target,manager.getNavigationRevision()] as const;expect(consumeVoiceEntry(...args)).toBe(true);expect(consumeVoiceEntry(...args)).toBe(false);manager.dispose();
+});
+
+it('recovers a known create by opening its exact id without creating again',async()=>{
+ mocks.secure.set('hermes.baseUrl','https://example.test');mocks.secure.set('hermes.token','secret');const manager=new AppManager();await manager.initialize();await flush();const client=mocks.clients[0];client.createSession=vi.fn(async()=>({session_id:'known'}));let known='';const first=entryFor(manager);mocks.openHook=async()=>{throw new Error('failed open');};await expect(manager.createSession({},{valid:first.owns,onCreated:id=>{known=id;},onActivated:first.activated})).rejects.toThrow('failed open');expect(known).toBe('known');
+ mocks.openHook=null;const retry=entryFor(manager);const resolved=await manager.openSession(known,{valid:retry.owns,onActivated:retry.activated});expect(retry.publish(resolved ?? known)).toBe(true);expect(client.createSession).toHaveBeenCalledTimes(1);expect(consumeVoiceEntry(manager.getEndpointEpoch(),manager.getConfiguredOrigin(),'known',manager.getNavigationRevision())).toBe(true);manager.dispose();
 });

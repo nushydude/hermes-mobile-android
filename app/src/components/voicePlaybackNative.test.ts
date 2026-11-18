@@ -18,8 +18,8 @@ vi.mock('expo-audio',()=>({
 }));
 import { nativeVoicePlayback } from './voicePlaybackNative';
 import { setAudioModeAsync } from 'expo-audio';
-import { voiceAudioMode } from './voiceAudioMode';
-const flush=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
+import { voiceAudioMode, registerVoiceCleanup } from './voiceAudioMode';
+const flush=async()=>{for(let i=0;i<20;i++)await Promise.resolve();};
 function deferred<T>(){let resolve!:(value:T)=>void;let reject!:(error:Error)=>void;const promise=new Promise<T>((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
 const audio={mime:'audio/mpeg',base64:'YWJj'};
 beforeEach(()=>{vi.mocked(setAudioModeAsync).mockReset().mockResolvedValue(undefined);native.files=[];native.players=[];native.write=async()=>{};native.loaded=false;native.synchronous=false;native.throwPause=false;native.throwAdd=false;native.throwRemove=false;vi.useFakeTimers();});
@@ -54,4 +54,9 @@ describe('native voice playback resource ownership',()=>{
  it('settles a load error even if removing its listener throws',async()=>{native.throwRemove=true;const work=nativeVoicePlayback(async()=>audio,()=>true).acquire('text',new AbortController().signal);await flush();native.players[0].listener({isLoaded:false,error:'failed'});await expect(work).rejects.toThrow();expect(native.players[0].removed).toBe(1);expect(native.files[0].deleted).toBe(1);expect(vi.getTimerCount()).toBe(0);});
  it('removes the player and file when pause throws',async()=>{native.loaded=true;const handle=await nativeVoicePlayback(async()=>audio,()=>true).acquire('text',new AbortController().signal);native.throwPause=true;handle.release();expect(native.players[0].removed).toBe(1);expect(native.files[0].deleted).toBe(1);});
  it('releasing an old handle repeatedly cannot affect newer resources',async()=>{native.loaded=true;const adapter=nativeVoicePlayback(async()=>audio,()=>true);const old=await adapter.acquire('old',new AbortController().signal);old.release();const newer=await adapter.acquire('new',new AbortController().signal);old.release();expect(native.players[1].removed).toBe(0);expect(native.players[1].paused).toBe(0);expect(native.files[1].exists).toBe(true);newer.release();expect(native.players[1].removed).toBe(1);expect(native.files[1].deleted).toBe(1);});
+});
+
+it('waits for prior capture cleanup before setting playback mode or creating a player',async()=>{
+ native.loaded=true;const cleanup=deferred<void>();registerVoiceCleanup(cleanup.promise);const work=nativeVoicePlayback(async()=>audio,()=>true).acquire('text',new AbortController().signal);await flush();
+ expect(setAudioModeAsync).not.toHaveBeenCalled();expect(native.players).toHaveLength(0);cleanup.resolve();const handle=await work;expect(setAudioModeAsync).toHaveBeenCalledTimes(1);handle.release();
 });

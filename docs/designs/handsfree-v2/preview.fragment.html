@@ -1,0 +1,146 @@
+<div id="hermes-handsfree-multimodal">
+  <style>
+    #hermes-handsfree-multimodal .stage {display:flex;justify-content:center;padding:20px 8px}
+    #hermes-handsfree-multimodal .phone {--hf-bg:#111d1b;--hf-surface:#1b2b26;--hf-raised:#263a32;--hf-text:#f3f4ec;--hf-muted:#a4b8ac;--hf-mint:#b7e8cb;--hf-ink:#1a3729;--hf-danger:#ffaaa2;position:relative;width:100%;max-width:370px;min-height:620px;box-sizing:border-box;overflow:hidden;border-radius:30px;background:var(--hf-bg);color:var(--hf-text);font:400 15px/1.5 system-ui,sans-serif;box-shadow:0 12px 35px #0002}
+    #hermes-handsfree-multimodal .phone * {box-sizing:border-box}
+    #hermes-handsfree-multimodal .phone button {font:inherit;color:inherit;cursor:inherit}
+    #hermes-handsfree-multimodal .phone button:focus-visible {outline:2px solid var(--hf-mint);outline-offset:4px}
+    #hermes-handsfree-multimodal .phone button:disabled {cursor:default}
+    #hermes-handsfree-multimodal .statusbar {display:flex;justify-content:space-between;padding:15px 24px 0;font-size:12px}
+    #hermes-handsfree-multimodal .view {min-height:580px;padding:22px 24px 26px;display:flex;flex-direction:column}
+    #hermes-handsfree-multimodal .view[hidden],#hermes-handsfree-multimodal [hidden] {display:none!important}
+    #hermes-handsfree-multimodal .chat-header {display:flex;justify-content:space-between;align-items:center;gap:12px}
+    #hermes-handsfree-multimodal .eyebrow {font-size:11px;letter-spacing:2px;color:var(--hf-muted)}
+    #hermes-handsfree-multimodal .name {font-size:18px;font-weight:500;margin-top:4px}
+    #hermes-handsfree-multimodal .chat-body {flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px}
+    #hermes-handsfree-multimodal .welcome {font-size:30px;line-height:1.2;font-weight:400;margin:0;max-width:260px}
+    #hermes-handsfree-multimodal .muted {color:var(--hf-muted)}
+    #hermes-handsfree-multimodal .composer {display:flex;align-items:center;gap:6px;background:var(--hf-surface);border-radius:24px;padding:8px}
+    #hermes-handsfree-multimodal .composer .placeholder {flex:1;color:var(--hf-muted);min-width:0}
+    #hermes-handsfree-multimodal .icon-button {display:grid;place-items:center;flex-shrink:0;width:48px;min-height:48px;border:0;border-radius:24px;background:transparent;color:var(--hf-text)}
+    #hermes-handsfree-multimodal .icon-button svg {width:22px;height:22px}
+    #hermes-handsfree-multimodal .talk {background:var(--hf-mint);color:var(--hf-ink)}
+    #hermes-handsfree-multimodal .icon-fallback {font-size:23px;font-weight:400}
+    #hermes-handsfree-multimodal button:has(svg) .icon-fallback {display:none}
+    #hermes-handsfree-multimodal .header-actions {display:flex;align-items:center;gap:4px}
+    #hermes-handsfree-multimodal .room-header>div:first-child {min-width:0}
+    #hermes-handsfree-multimodal .session-title {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px}
+    #hermes-handsfree-multimodal .room-header {display:flex;align-items:center;justify-content:space-between;gap:12px}
+    #hermes-handsfree-multimodal .room-header .name {font-size:15px}
+    #hermes-handsfree-multimodal .end {border:0;background:transparent;min-height:48px;padding:0 6px;color:var(--hf-muted)}
+    #hermes-handsfree-multimodal .conversation {flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 0;gap:26px;text-align:center}
+    #hermes-handsfree-multimodal .aura {width:230px;height:230px;display:grid;place-items:center;position:relative}
+    #hermes-handsfree-multimodal .halo {position:absolute;inset:4px;border-radius:50%;background:radial-gradient(circle,#b7e8cb20 0%,#b7e8cb08 55%,transparent 72%);transform:scale(.96);transition:transform .7s ease,opacity .7s ease}
+    #hermes-handsfree-multimodal .orb {display:grid;place-items:center;width:142px;height:142px;padding:0;border:0;border-radius:46% 54% 49% 51%;background:radial-gradient(circle at 30% 25%,#d2f3df,#9bc6ac 60%,#5c8f78);box-shadow:inset -14px -18px 28px #183a3230,0 0 50px #b7e8cb0b;transition:transform .6s ease,border-radius .8s ease,opacity .6s ease;position:relative;color:var(--hf-ink)}
+    #hermes-handsfree-multimodal .orb i {opacity:.55}
+    #hermes-handsfree-multimodal .headline {font-size:27px;font-weight:400;letter-spacing:-.5px;margin:0}
+    #hermes-handsfree-multimodal .hint {font-size:14px;color:var(--hf-muted);min-height:42px;max-width:275px;margin:8px 0 0}
+    #hermes-handsfree-multimodal .caption {font-size:14px;min-height:42px;max-width:285px;margin:0;color:var(--hf-text)}
+    #hermes-handsfree-multimodal .room-footer {display:flex;flex-direction:column;align-items:center;gap:14px}
+    #hermes-handsfree-multimodal .room-controls {display:flex;align-items:center;justify-content:center;width:100%;position:relative}
+    #hermes-handsfree-multimodal .room-controls .add {position:absolute;left:0}
+    #hermes-handsfree-multimodal .primary {border:0;border-radius:28px;background:var(--hf-raised);color:var(--hf-text);display:flex;align-items:center;justify-content:center;gap:9px;min-height:56px;min-width:138px;padding:12px 22px;font-weight:500}
+    #hermes-handsfree-multimodal .primary:disabled {opacity:.45}
+    #hermes-handsfree-multimodal .footnote {color:var(--hf-muted);font-size:12px;margin:0}
+    #hermes-handsfree-multimodal .phone[data-phase="listening"] .halo {animation:hf-breathe 4s ease-in-out infinite}
+    #hermes-handsfree-multimodal .phone[data-phase="hearing"] .orb {transform:scale(1.08);animation:hf-hearing 1.8s ease-in-out infinite}
+    #hermes-handsfree-multimodal .phone[data-phase="hearing"] .halo {transform:scale(1.15)}
+    #hermes-handsfree-multimodal .phone[data-phase="thinking"] .orb {animation:hf-think 8s linear infinite;opacity:.8}
+    #hermes-handsfree-multimodal .phone[data-phase="speaking"] .orb {animation:hf-speak 2.8s ease-in-out infinite}
+    #hermes-handsfree-multimodal .phone[data-phase="paused"] .orb {opacity:.35;transform:scale(.9)}
+    #hermes-handsfree-multimodal .confirm {position:absolute;inset:0;z-index:4;background:#08130fe8;display:flex;align-items:flex-end;padding:24px}
+    #hermes-handsfree-multimodal .confirm-card {width:100%;padding:24px;background:var(--hf-surface);border-radius:24px;display:flex;flex-direction:column;gap:14px}
+    #hermes-handsfree-multimodal .confirm-card h3 {margin:0;font-weight:500;font-size:22px}
+    #hermes-handsfree-multimodal .confirm-card p {margin:0;color:var(--hf-muted)}
+    #hermes-handsfree-multimodal .confirm-card button {border:0;min-height:48px;padding:12px;border-radius:16px;background:var(--hf-raised)}
+    #hermes-handsfree-multimodal .confirm-card .finish {background:var(--hf-danger);color:var(--hf-ink)}
+    #hermes-handsfree-multimodal .confirm-card .menu-item {display:flex;align-items:center;gap:12px;text-align:left;background:var(--hf-raised)}
+    #hermes-handsfree-multimodal .media-sheet {position:absolute;inset:0;z-index:5;background:#08130fe8;display:flex;align-items:flex-end;padding:20px}
+    #hermes-handsfree-multimodal .attachment {display:flex;align-items:center;gap:10px;background:var(--hf-surface);border-radius:18px;padding:10px;width:100%;margin-bottom:8px}
+    #hermes-handsfree-multimodal .attachment .preview-thumb {display:grid;place-items:center;min-height:48px;width:48px;background:var(--hf-raised);border-radius:10px;font-size:12px}
+    #hermes-handsfree-multimodal .attachment .attachment-copy {flex:1;font-size:12px}
+    #hermes-handsfree-multimodal .attachment button {border:0;min-height:48px;background:var(--hf-raised);border-radius:14px;padding:0 14px}
+    #hermes-handsfree-multimodal .demo-controls {display:flex;justify-content:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+    @keyframes hf-breathe {50%{transform:scale(1.035);opacity:.7}}
+    @keyframes hf-hearing {50%{transform:scale(1.045);border-radius:51% 49% 46% 54%}}
+    @keyframes hf-think {to{transform:rotate(360deg)}}
+    @keyframes hf-speak {50%{transform:scale(1.055);border-radius:53% 47% 54% 46%}}
+    @media(prefers-reduced-motion:reduce){#hermes-handsfree-multimodal .phone * {animation:none!important;transition:none!important}}
+    #hermes-handsfree-multimodal .phone.reduce-motion * {animation:none!important;transition:none!important}
+    @media(max-width:380px){#hermes-handsfree-multimodal .view {padding-left:18px;padding-right:18px}#hermes-handsfree-multimodal .aura {width:200px;height:200px}}
+  </style>
+  <div class="stage viz-dotted-background">
+    <div class="phone" data-phase="chat" aria-label="Proposed Hermes hands-free experience">
+      <div class="statusbar" aria-hidden="true"><span>9:41</span><span>••• ▰</span></div>
+      <section class="view chat-view">
+        <header class="chat-header"><div><div class="eyebrow">HERMES</div><div class="name session-title">Weekend plans</div></div><button class="icon-button new-chat cursor-interaction" aria-label="New conversation" data-tooltip="New conversation" type="button"><i data-lucide="square-pen" aria-hidden="true"></i><span class="icon-fallback" aria-hidden="true">↗</span></button></header>
+        <div class="chat-body"><p class="welcome">What’s on your mind?</p><p class="muted">Start here, or talk it through.</p></div>
+        <div class="attachment chat-attachment" hidden><div class="preview-thumb">Photo</div><div class="attachment-copy">Sample image<br><span class="muted">Ready to send</span></div><button class="send-attachment cursor-interaction" type="button">Send</button><button class="remove-attachment cursor-interaction" aria-label="Remove attachment" type="button">×</button></div>
+        <div class="composer"><button class="icon-button add cursor-interaction" aria-label="Add attachment or take photo" data-tooltip="Add attachment or take photo" type="button"><i data-lucide="plus" aria-hidden="true"></i><span class="icon-fallback" aria-hidden="true">+</span></button><span class="placeholder">Message Hermes…</span><button class="icon-button talk cursor-interaction" aria-label="Start hands-free conversation" data-tooltip="Start hands-free conversation" type="button"><i data-lucide="audio-lines" aria-hidden="true"></i><span class="icon-fallback" aria-hidden="true">≋</span></button></div>
+      </section>
+      <section class="view room-view" hidden>
+        <header class="room-header"><div><div class="eyebrow">HANDS-FREE</div><div class="name session-title">Weekend plans</div></div><div class="header-actions"><button class="icon-button new-voice cursor-interaction" aria-label="New hands-free conversation" data-tooltip="New hands-free conversation" type="button"><i data-lucide="square-pen" aria-hidden="true"></i><span class="icon-fallback" aria-hidden="true">↗</span></button><button class="end cursor-interaction" type="button">End</button></div></header>
+        <div class="conversation">
+          <div class="aura"><div class="halo" aria-hidden="true"></div><button class="orb" disabled aria-label="Voice activity"><i data-lucide="audio-lines" aria-hidden="true"></i></button></div>
+          <div aria-live="polite"><h2 class="headline">Listening</h2><p class="hint">Go ahead. I’m listening.</p></div>
+          <p class="caption"></p>
+        </div>
+        <div class="room-footer"><div class="attachment room-attachment" hidden><div class="preview-thumb">Photo</div><div class="attachment-copy">Sample image<br><span class="muted">Ready to send</span></div><button class="send-attachment cursor-interaction" type="button">Send</button><button class="remove-attachment cursor-interaction" aria-label="Remove attachment" type="button">×</button></div><div class="room-controls"><button class="icon-button add cursor-interaction" aria-label="Add attachment or take photo" data-tooltip="Add attachment or take photo" type="button"><i data-lucide="plus" aria-hidden="true"></i><span class="icon-fallback" aria-hidden="true">+</span></button><button class="primary cursor-interaction" type="button"><span>Pause</span></button></div><p class="footnote">Your conversation stays in this chat.</p></div>
+      </section>
+      <div class="confirm" role="dialog" aria-label="End voice conversation" hidden>
+        <div class="confirm-card"><h3>End voice conversation?</h3><p>You can continue typing in this chat.</p><button class="finish cursor-interaction" type="button">End conversation</button><button class="keep cursor-interaction" type="button">Keep talking</button></div>
+      </div>
+      <div class="media-sheet" role="dialog" aria-label="Add attachment" hidden><div class="confirm-card"><h3>Add to this conversation</h3><button class="menu-item camera cursor-interaction" type="button"><i data-lucide="camera" aria-hidden="true"></i>Take a photo</button><button class="menu-item photos cursor-interaction" type="button"><i data-lucide="image" aria-hidden="true"></i>Choose image</button><button class="media-cancel cursor-interaction" type="button">Cancel</button></div></div>
+      <div class="confirm new-confirm" role="dialog" aria-label="New voice conversation" hidden><div class="confirm-card"><h3>Start a new conversation?</h3><p>Your current chat will be kept.</p><button class="start-new cursor-interaction" type="button">Start hands-free</button><button class="stay-here cursor-interaction" type="button">Stay here</button></div></div>
+    </div>
+  </div>
+  <div class="demo-controls"><button class="btn sample-turn" type="button" disabled>Preview a sample turn</button></div>
+  <script>
+    (function(){
+      const root=document.getElementById('hermes-handsfree-multimodal');
+      const phone=root.querySelector('.phone'),chat=root.querySelector('.chat-view'),room=root.querySelector('.room-view');
+      const headline=root.querySelector('.headline'),hint=root.querySelector('.hint'),caption=root.querySelector('.caption');
+      const primary=root.querySelector('.primary'),label=primary.querySelector('span'),orb=root.querySelector('.orb');
+      const confirmation=root.querySelector('.confirm'),sample=root.querySelector('.sample-turn');
+      const media=root.querySelector('.media-sheet'),newConfirmation=root.querySelector('.new-confirm');
+      const state={phase:'chat',calmMotion:true,session:0};let sequence=0,previous='listening',mediaPrevious='chat',sessionCounter=0,attachmentTurn=false;
+      const attachments=new Map();
+      const hasAttachment=()=>attachments.get(state.session)===true;
+      const copy={listening:['Listening','Go ahead. I’m listening.',''],hearing:['I’m listening','Take your time.',''],thinking:['Thinking','I’ll speak when the reply is ready.','“Let’s plan something relaxing for Saturday.”'],speaking:['Speaking','Tap the orb to interrupt and speak.','A quiet walk, a late breakfast, and an afternoon with no plans.'],paused:['Paused','Tap Resume when you’re ready.','']};
+      function render(){
+        const active=state.phase!=='chat';phone.dataset.phase=state.phase;phone.dataset.session=String(state.session);phone.classList.toggle('reduce-motion',!state.calmMotion);chat.hidden=active;room.hidden=!active;sample.disabled=!active||state.phase==='paused'||hasAttachment();
+        const c=copy[state.phase]||copy.listening;headline.textContent=c[0];hint.textContent=c[1];caption.textContent=c[2];label.textContent=state.phase==='paused'?'Resume':'Pause';orb.disabled=state.phase!=='speaking';orb.setAttribute('aria-label',orb.disabled?'Voice activity':'Interrupt and speak');orb.classList.toggle('cursor-interaction',!orb.disabled);
+        if(attachmentTurn&&state.phase==='thinking')caption.textContent='“Tell me about this photo.”';
+        if(attachmentTurn&&state.phase==='speaking')caption.textContent='The image stays in this conversation. What would you like to know?';
+        primary.disabled=hasAttachment();
+        if(hasAttachment()&&active)hint.textContent='Send or remove your attachment to continue.';
+        root.querySelectorAll('.session-title').forEach(element=>{element.textContent=state.session===0?'Weekend plans':'New conversation';});
+        root.querySelector('.chat-attachment').hidden=active||!hasAttachment();
+        root.querySelector('.room-attachment').hidden=!active||!hasAttachment();
+      }
+      function phase(value){state.phase=value;render();}
+      function enter(){sequence++;phase(hasAttachment()?'paused':'listening');}
+      function createVoice(){sequence++;state.session=++sessionCounter;attachmentTurn=false;newConfirmation.hidden=true;phase('listening');}
+      root.querySelector('.talk').addEventListener('click',enter);
+      primary.addEventListener('click',()=>{sequence++;phase(state.phase==='paused'?'listening':'paused');});
+      orb.addEventListener('click',()=>{if(state.phase==='speaking')enter();});
+      sample.addEventListener('click',()=>{const token=++sequence;attachmentTurn=false;phase('hearing');[[1800,'thinking'],[3800,'speaking'],[8500,'listening']].forEach(([delay,next])=>setTimeout(()=>{if(token===sequence&&confirmation.hidden)phase(next);},delay));});
+      root.querySelector('.end').addEventListener('click',()=>{sequence++;previous=state.phase;phase('paused');confirmation.hidden=false;root.querySelector('.keep').focus();});
+      root.querySelector('.keep').addEventListener('click',()=>{confirmation.hidden=true;phase(previous);primary.focus();});
+      root.querySelector('.finish').addEventListener('click',()=>{confirmation.hidden=true;sequence++;phase('chat');root.querySelector('.talk').focus();});
+      root.querySelectorAll('.add').forEach(button=>button.addEventListener('click',()=>{sequence++;mediaPrevious=state.phase;if(state.phase!=='chat')phase('paused');media.hidden=false;root.querySelector('.camera').focus();}));
+      root.querySelector('.media-cancel').addEventListener('click',()=>{media.hidden=true;phase(mediaPrevious==='chat'?'chat':'paused');});
+      function chooseMedia(){media.hidden=true;attachments.set(state.session,true);phase(mediaPrevious==='chat'?'chat':'paused');}
+      root.querySelector('.camera').addEventListener('click',chooseMedia);
+      root.querySelector('.photos').addEventListener('click',chooseMedia);
+      root.querySelectorAll('.remove-attachment').forEach(button=>button.addEventListener('click',()=>{attachments.delete(state.session);render();}));
+      root.querySelectorAll('.send-attachment').forEach(button=>button.addEventListener('click',()=>{attachments.delete(state.session);if(state.phase==='chat'){render();return;}const token=++sequence;attachmentTurn=true;phase('thinking');setTimeout(()=>{if(token===sequence&&confirmation.hidden&&newConfirmation.hidden&&media.hidden)phase('speaking');},1800);}));
+      root.querySelector('.new-voice').addEventListener('click',()=>{sequence++;previous=state.phase;phase('paused');newConfirmation.hidden=false;root.querySelector('.stay-here').focus();});
+      root.querySelector('.start-new').addEventListener('click',createVoice);
+      root.querySelector('.stay-here').addEventListener('click',()=>{newConfirmation.hidden=true;phase(previous);});
+      root.querySelector('.new-chat').addEventListener('click',()=>{sequence++;state.session=++sessionCounter;phase('chat');});
+      if(globalThis.Tweak){const tweak=new Tweak({container:phone,onChange:()=>{sequence++;confirmation.hidden=true;newConfirmation.hidden=true;media.hidden=true;render();}});tweak.addSelect(state,'phase',{label:'Preview state',options:['chat','listening','hearing','thinking','speaking','paused']});tweak.addToggle(state,'calmMotion',{label:'Animation'});}
+      render();
+    })();
+  </script>
+</div>

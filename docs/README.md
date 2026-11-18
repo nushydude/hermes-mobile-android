@@ -6,6 +6,8 @@ Installed owner-test preview: [0.3.2 (9)](releases/0.3.2.md); behavior acceptanc
 
 ## Read first
 
+Current approved implementation: [full-screen hands-free redesign](plans/2026-11-18-fullscreen-handsfree.md), with [shared design references](designs/handsfree-v2/DESIGN.md). Source implementation/review is in progress; owner approval is required before APK packaging.
+
 1. [Project overview](../README.md): capabilities and entry points.
 2. [Current status](STATUS.md): shipped work, evidence and acceptance gaps.
 3. [Execution plan](../PLAN.md): approved scope, machine rules and gates.

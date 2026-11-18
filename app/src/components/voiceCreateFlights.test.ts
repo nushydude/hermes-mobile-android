@@ -1,0 +1,4 @@
+import {expect,it} from 'vitest';
+import {VoiceCreateFlights} from './voiceCreateFlights';
+it('a stale failure cannot mark a newer room unknown or clear its flight',()=>{let scope='A';const flights=new VoiceCreateFlights();const a=flights.begin('A',()=>scope==='A')!;scope='B';const b=flights.begin('B',()=>scope==='B')!;flights.markUnknown(a);flights.finish(a);expect(flights.current(b)).toBe(true);expect(flights.begin('B',()=>true)).toBeNull();flights.finish(b);expect(flights.begin('B',()=>true)).not.toBeNull();});
+it('blocks uncertain retries only in the originating revision',()=>{const flights=new VoiceCreateFlights();const a=flights.begin('A:1',()=>true)!;flights.markUnknown(a);flights.finish(a);expect(flights.begin('A:1',()=>true)).toBeNull();expect(flights.begin('A:2',()=>true)).not.toBeNull();});
