@@ -80,8 +80,10 @@ free-allowance, provider and local-workload prerequisites are verified.
 Offline `node tools/smoke/timing-summary-cli.mjs <result-file> ...` groups labeled
 baseline/candidate files, reporting median, nearest-rank p95, sample counts,
 failed/incomplete runs and missing stages. Include only comparable workloads;
-failures and incomplete stages are not zero-latency samples. A numeric diagnostic
-event export can be wrapped as `{ "arm": "baseline", "result": "passed", "events": [...] }`
-with one trace per file. First text is a gateway-visible delta, not provider TTFT;
+failures and incomplete stages are not zero-latency samples. The app's "Copy response timings" export is
+`{ "events": [...], "samples": [...], "renders": {...} }`. Wrap one trace's events as
+`{ "arm": "baseline", "result": "passed", "events": [...] }` with one trace per file. Wrap a
+whole capture's `samples` and `renders` without `events` to get nearest-rank p50/p90/p95/max
+per duration sample (and payload size for `persist_ms`) and summed render counts per arm. First text is a gateway-visible delta, not provider TTFT;
 playback status is not an acoustic measurement. Run local synthetic tests with
 `node --test tools/smoke/timing-summary.test.mjs`.

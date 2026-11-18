@@ -67,6 +67,8 @@ export interface ClientOptions {
   /** The caller must durably save this before resolving. Keep it on failures. */
   persistSubmission: (submission: PendingSubmission) => Promise<void>;
   acknowledgeSubmission: (submission: PendingSubmission, receipt: unknown) => Promise<void>;
+  /** Diagnostics only: called immediately before each prompt.submit frame. Errors are ignored. */
+  onSubmitSent?: (submission: PendingSubmission) => void;
   /** The UI owns the input. AbortSignal fires on request.cancel or connection loss. */
   requestSecret?: (
     method: "sudo" | "secret",
@@ -969,6 +971,9 @@ export class CanonicalClient {
       await this.waitForReady();
       const generation = this.generation;
       let receipt: unknown;
+      try {
+        this.opts.onSubmitSent?.(pending);
+      } catch {}
       try {
         receipt = await this.channel.request(
           "prompt.submit",

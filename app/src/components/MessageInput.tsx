@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { TextInput, useWindowDimensions } from "react-native";
 import { colors } from "../theme";
+import { useRenderCounter } from "../state/conversationDiagnostics";
 
 /** A compact draft that grows with its contents, then scrolls for longer edits. */
 export function MessageInput({
@@ -10,6 +11,7 @@ export function MessageInput({
   value: string;
   onChangeText: (value: string) => void;
 }) {
+  useRenderCounter("message_input");
   const [contentHeight, setContentHeight] = useState(48);
   const { height: windowHeight, fontScale } = useWindowDimensions();
   const lineHeight = 22 * fontScale;

@@ -70,7 +70,7 @@ import { VoicePlayback } from "../components/voicePlayback";
 import { nativeVoicePlayback } from "../components/voicePlaybackNative";
 import { speechParts, speechText } from "../components/voiceText";
 import { TypedSpeechWatcher } from "../components/typedSpeechWatcher";
-import { conversationDiagnostics } from "../state/conversationDiagnostics";
+import { conversationDiagnostics, useRenderCounter } from "../state/conversationDiagnostics";
 import { VoiceSheet } from "../components/VoiceSheet";
 import { consumeVoiceEntry, subscribeVoiceEntry } from "../components/newSessionIntent";
 import { VoiceEntryTransaction } from "../components/voiceEntryTransaction";
@@ -538,6 +538,7 @@ function Prompt({ value, id }: { value: unknown; id: string }) {
 }
 type Attachment = { uri: string; path: string; mime: string };
 export function ChatScreen() {
+  useRenderCounter("chat_screen");
   const endpointEpoch = appManager.getEndpointEpoch();
   const navigationRevision = appManager.getNavigationRevision();
   const connectionGrace = useConnectionGrace();
@@ -685,7 +686,15 @@ export function ChatScreen() {
       new SpeechOwner(
         new VoicePlayback(
           nativeVoicePlayback(
-            (text, signal) => appManager.speakAudio(text, signal, endpointEpoch),
+            (text, signal) => {
+              // Only the first section's request and readiness are kept per trace.
+              const trace = playbackTrace.current;
+              conversationDiagnostics.mark(trace, "tts_request_start");
+              return appManager.speakAudio(text, signal, endpointEpoch).then((audio) => {
+                conversationDiagnostics.mark(trace, "tts_ready");
+                return audio;
+              });
+            },
             () =>
               AppState.currentState === "active" &&
               appManager.getEndpointEpoch() === endpointEpoch &&
@@ -1300,8 +1309,12 @@ export function ChatScreen() {
   );
   const onReadReply = useCallback((reply: string) => openVoice(reply), [speechOwner]);
   const renderTimelineItem = useCallback(
-    ({ item }: { item: TimelineItem }) =>
-      item.kind === "message" ? (
+    ({ item }: { item: TimelineItem }) => {
+      if (conversationDiagnostics.isEnabled()) {
+        conversationDiagnostics.countRender("timeline_item");
+        if (item.key === "live") conversationDiagnostics.countRender("live_message");
+      }
+      return item.kind === "message" ? (
         <Message
           value={item.value}
           sessionId={id}
@@ -1323,7 +1336,8 @@ export function ChatScreen() {
         <Prompt value={item.value} id={id} />
       ) : (
         <Activity value={item.value} sessionId={id} />
-      ),
+      );
+    },
     [id, showActivity, onReadReply, onActions, findOpen, findQuery, findKey],
   );
   const onListSize = useCallback(() => {

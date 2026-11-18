@@ -32,6 +32,31 @@ describe("activity preference", () => {
   });
 });
 
+describe("collect timings preference", () => {
+  beforeEach(() => {
+    storage.value = undefined;
+    vi.resetModules();
+  });
+  it("defaults off and persists explicit on and off across reloads", async () => {
+    let p = await import("./preferences");
+    expect(p.getCollectTimings()).toBe(false);
+    p.setCollectTimings(true);
+    expect(storage.value).toBe("1");
+    vi.resetModules();
+    p = await import("./preferences");
+    expect(p.getCollectTimings()).toBe(true);
+    p.setCollectTimings(false);
+    vi.resetModules();
+    p = await import("./preferences");
+    expect(p.getCollectTimings()).toBe(false);
+  });
+  it("treats an unexpected stored value as off", async () => {
+    storage.value = "yes";
+    const p = await import("./preferences");
+    expect(p.getCollectTimings()).toBe(false);
+  });
+});
+
 describe("speak replies preference", () => {
   beforeEach(() => {
     storage.value = undefined;

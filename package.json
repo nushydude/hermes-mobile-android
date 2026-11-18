@@ -13,6 +13,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspace @hermes-mobile/protocol",
     "test:host": "npm test && npm run test:app && npm run test:preferences && node --test app/plugins/withIncomingShares.test.cjs tools/config.test.mjs tools/smoke/fixture.test.mjs tools/smoke/timing-summary.test.mjs tools/notifications/show-subscription-qr.test.mjs tools/smoke/core.test.mjs tools/smoke/audio-core.test.mjs && python -m unittest discover -s tools/notifications/tests -p \"test_*.py\"",
+    "bench": "node tools/bench/run.mjs",
     "sync:contract": "node tools/sync-contract.mjs",
     "check:contract": "node tools/sync-contract.mjs --check",
     "smoke": "node tools/smoke/probe.ts --resume-desktop --exercise",

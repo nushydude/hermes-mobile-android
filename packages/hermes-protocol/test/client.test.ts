@@ -755,6 +755,43 @@ describe("sessions and durable events", () => {
     client.close();
   });
 
+  it("reports each prompt.submit just before it is sent and ignores a failing reporter", async () => {
+    const server = new FakeServer();
+    const operations: string[] = [];
+    server.custom = (socket, frame) => {
+      if (frame.method !== "prompt.submit") return false;
+      operations.push("send");
+      if (operations.filter((x) => x === "send").length === 1) socket.close();
+      else queueMicrotask(() => socket.frame({ id: frame.id, result: { status: "started" } }));
+      return true;
+    };
+    const client = make(server, {
+      createId: () => "stable-id",
+      persistSubmission: async () => {
+        operations.push("persist");
+      },
+      acknowledgeSubmission: async () => {
+        operations.push("ack");
+      },
+      onSubmitSent: (submission) => {
+        operations.push(`sent:${submission.submission_id}`);
+        throw new Error("diagnostics failure");
+      },
+    });
+    await client.connect();
+    await client.openSession("s");
+    await client.submit({ session_id: "s", text: "hello" });
+    expect(operations).toEqual([
+      "persist",
+      "sent:stable-id",
+      "send",
+      "sent:stable-id",
+      "send",
+      "ack",
+    ]);
+    client.close();
+  });
+
   it("retries a fenced mutation once using the conflict revision and generation", async () => {
     const server = new FakeServer();
     const calls: Frame[] = [];
