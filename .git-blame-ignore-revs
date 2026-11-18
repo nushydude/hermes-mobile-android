@@ -1,0 +1,6 @@
+# Mechanical reformatting commits. Use with:
+#   git blame --ignore-revs-file .git-blame-ignore-revs
+# or: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Format first-party JS/TS with Prettier
+d8043b6a956b370731f1d1dba8a6041f4c15ca00
