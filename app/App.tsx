@@ -12,23 +12,32 @@ import { startConnectionGrace } from "./src/components/useConnectionGrace";
 import { ChatScreen } from "./src/screens/ChatScreen";
 import { IncomingShareSheet } from "./src/sharing/IncomingShareSheet";
 export default function App() {
-  const state = useAppStore(s => ({credentialsConfigured:s.credentialsConfigured,activeSessionId:s.activeSessionId,secureRequest:s.secureRequest}));
-  const [secure, setSecure] = useState<{request: typeof state.secureRequest; value: string}>({request:null, value:""});
+  const state = useAppStore((s) => ({
+    credentialsConfigured: s.credentialsConfigured,
+    activeSessionId: s.activeSessionId,
+    secureRequest: s.secureRequest,
+  }));
+  const [secure, setSecure] = useState<{ request: typeof state.secureRequest; value: string }>({
+    request: null,
+    value: "",
+  });
   const [setup, setSetup] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
-  useEffect(() => { startConnectionGrace(); }, []);
+  useEffect(() => {
+    startConnectionGrace();
+  }, []);
   useEffect(() => setupNotifications(), []);
   useEffect(() => {
-    setSecure(current => current.request === state.secureRequest ? current : {request:state.secureRequest, value:""});
+    setSecure((current) =>
+      current.request === state.secureRequest
+        ? current
+        : { request: state.secureRequest, value: "" },
+    );
   }, [state.secureRequest]);
   useEffect(() => {
     void appManager
       .initialize()
-      .catch(() =>
-        setInitError(
-          "Unable to open local storage. Restart the app and try again.",
-        ),
-      );
+      .catch(() => setInitError("Unable to open local storage. Restart the app and try again."));
   }, []);
   return (
     <SafeAreaProvider>
@@ -42,21 +51,23 @@ export default function App() {
         ) : !state.credentialsConfigured || setup ? (
           <SetupScreen
             onDone={() => setSetup(false)}
-            onCancel={
-              state.credentialsConfigured ? () => setSetup(false) : undefined
-            }
+            onCancel={state.credentialsConfigured ? () => setSetup(false) : undefined}
           />
         ) : state.activeSessionId ? (
           <ChatScreen />
         ) : (
           <HomeScreen onSetup={() => setSetup(true)} />
         )}
-        <IncomingShareSheet enabled={state.credentialsConfigured && !setup && !state.secureRequest} />
+        <IncomingShareSheet
+          enabled={state.credentialsConfigured && !setup && !state.secureRequest}
+        />
         <Modal
           visible={!!state.secureRequest}
           transparent
           animationType="slide"
-          onRequestClose={() => { if (state.secureRequest) appManager.cancelSecret(state.secureRequest); }}
+          onRequestClose={() => {
+            if (state.secureRequest) appManager.cancelSecret(state.secureRequest);
+          }}
         >
           <View
             style={{
@@ -68,9 +79,7 @@ export default function App() {
           >
             <Card>
               <Text style={[ui.text, { fontWeight: "700" }]}>
-                {state.secureRequest?.method === "sudo"
-                  ? "Password required"
-                  : "Secret required"}
+                {state.secureRequest?.method === "sudo" ? "Password required" : "Secret required"}
               </Text>
               <Text style={ui.muted}>Enter the requested value securely.</Text>
               <TextInput
@@ -79,14 +88,29 @@ export default function App() {
                 autoCorrect={false}
                 secureTextEntry
                 value={secure.request === state.secureRequest ? secure.value : ""}
-                onChangeText={(value) => { if (state.secureRequest && appManager.getState().secureRequest === state.secureRequest) setSecure({request:state.secureRequest, value}); }}
+                onChangeText={(value) => {
+                  if (
+                    state.secureRequest &&
+                    appManager.getState().secureRequest === state.secureRequest
+                  )
+                    setSecure({ request: state.secureRequest, value });
+                }}
                 style={ui.input}
               />
-              <Button label="Cancel" onPress={() => { if (state.secureRequest) appManager.cancelSecret(state.secureRequest); }} />
+              <Button
+                label="Cancel"
+                onPress={() => {
+                  if (state.secureRequest) appManager.cancelSecret(state.secureRequest);
+                }}
+              />
               <Button
                 label="Submit"
                 onPress={() => {
-                  if (state.secureRequest) appManager.answerSecret(state.secureRequest, secure.request === state.secureRequest ? secure.value : "");
+                  if (state.secureRequest)
+                    appManager.answerSecret(
+                      state.secureRequest,
+                      secure.request === state.secureRequest ? secure.value : "",
+                    );
                 }}
               />
             </Card>

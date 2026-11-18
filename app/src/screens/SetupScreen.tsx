@@ -1,24 +1,11 @@
 import { useRef, useState } from "react";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-} from "react-native";
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput } from "react-native";
 import { appManager } from "../state";
 import { colors } from "../theme";
 import { Button, Card, ui } from "../components/UI";
 
-export function SetupScreen({
-  onDone,
-  onCancel,
-}: {
-  onDone?: () => void;
-  onCancel?: () => void;
-}) {
+export function SetupScreen({ onDone, onCancel }: { onDone?: () => void; onCancel?: () => void }) {
   const scanLocked = useRef(false);
   const busyRef = useRef(false);
   const [scanning, setScanning] = useState(false);
@@ -44,9 +31,7 @@ export function SetupScreen({
     } catch (e) {
       Alert.alert(
         "Connection failed",
-        e instanceof Error
-          ? e.message
-          : "Check Tailscale and that the PC is awake.",
+        e instanceof Error ? e.message : "Check Tailscale and that the PC is awake.",
       );
     } finally {
       busyRef.current = false;
@@ -59,11 +44,7 @@ export function SetupScreen({
     if (result?.granted) {
       scanLocked.current = false;
       setScanning(true);
-    } else
-      Alert.alert(
-        "Camera permission needed",
-        "Allow camera access to scan the setup code.",
-      );
+    } else Alert.alert("Camera permission needed", "Allow camera access to scan the setup code.");
   }
   return (
     <KeyboardAvoidingView
@@ -82,8 +63,8 @@ export function SetupScreen({
         <Text style={ui.label}>HERMES MOBILE</Text>
         <Text style={ui.heading}>Bring your sessions with you.</Text>
         <Text style={[ui.text, { color: colors.muted, lineHeight: 23 }]}>
-          Connect securely to your Hermes gateway over Tailscale. Scan the setup
-          code from your PC to get started.
+          Connect securely to your Hermes gateway over Tailscale. Scan the setup code from your PC
+          to get started.
         </Text>
         {scanning ? (
           <Card>
@@ -104,18 +85,11 @@ export function SetupScreen({
                     throw new Error();
                   void configure(value.baseUrl, value.token);
                 } catch {
-                  Alert.alert(
-                    "Invalid setup code",
-                    "Scan a Hermes Mobile version 1 setup code.",
-                  );
+                  Alert.alert("Invalid setup code", "Scan a Hermes Mobile version 1 setup code.");
                 }
               }}
             />
-            <Button
-              label="Cancel scan"
-              secondary
-              onPress={() => setScanning(false)}
-            />
+            <Button label="Cancel scan" secondary onPress={() => setScanning(false)} />
           </Card>
         ) : (
           <Button
@@ -125,9 +99,7 @@ export function SetupScreen({
           />
         )}
         <Card>
-          <Text style={[ui.text, { fontWeight: "700" }]}>
-            Or enter details manually
-          </Text>
+          <Text style={[ui.text, { fontWeight: "700" }]}>Or enter details manually</Text>
           <TextInput
             editable={!busy}
             accessibilityLabel="Gateway HTTPS address"
@@ -162,9 +134,7 @@ export function SetupScreen({
         {onCancel && (
           <Button label="Back to sessions" secondary disabled={busy} onPress={onCancel} />
         )}
-        <Text style={ui.muted}>
-          Your token is stored securely on this device.
-        </Text>
+        <Text style={ui.muted}>Your token is stored securely on this device.</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );

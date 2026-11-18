@@ -7,15 +7,11 @@ test("extracts projected refs and inline image parts without accepting external 
     images: ["C:\\My Files\\a.png"],
   });
   assert.deepEqual(
-    extractImages([
-      { type: "image_url", image_url: { url: "data:image/png;base64,YWJj" } },
-    ]),
+    extractImages([{ type: "image_url", image_url: { url: "data:image/png;base64,YWJj" } }]),
     { text: "", images: ["data:image/png;base64,YWJj"] },
   );
   assert.deepEqual(
-    extractImages([
-      { type: "image_url", image_url: { url: "https://example.com/a.png" } },
-    ]),
+    extractImages([{ type: "image_url", image_url: { url: "https://example.com/a.png" } }]),
     { text: "", images: [] },
   );
 });

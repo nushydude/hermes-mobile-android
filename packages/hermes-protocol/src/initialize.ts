@@ -1,2 +1,2 @@
-import { installProtocolGlobals } from './globals.js';
+import { installProtocolGlobals } from "./globals.js";
 installProtocolGlobals();

@@ -1,11 +1,5 @@
 import React from "react";
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type ViewStyle,
-} from "react-native";
+import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { colors } from "../theme";
 
 export function Button({
@@ -33,19 +27,11 @@ export function Button({
         pressed && { opacity: 0.7 },
       ]}
     >
-      <Text style={[styles.buttonText, secondary && { color: colors.text }]}>
-        {label}
-      </Text>
+      <Text style={[styles.buttonText, secondary && { color: colors.text }]}>{label}</Text>
     </Pressable>
   );
 }
-export function Card({
-  children,
-  style,
-}: {
-  children: React.ReactNode;
-  style?: ViewStyle;
-}) {
+export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
   return <View style={[styles.card, style]}>{children}</View>;
 }
 export const ui = StyleSheet.create({

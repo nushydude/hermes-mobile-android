@@ -1,8 +1,8 @@
-import './polyfills';
-import { registerRootComponent } from 'expo';
+import "./polyfills";
+import { registerRootComponent } from "expo";
 
-import App from './App';
-import { registerNotifications } from './src/notifications';
+import App from "./App";
+import { registerNotifications } from "./src/notifications";
 
 registerNotifications();
 

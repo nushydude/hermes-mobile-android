@@ -37,9 +37,7 @@ export function extractImages(value: unknown): {
       const item = part as Record<string, any>;
       if (["image_url", "input_image", "image"].includes(item.type))
         addImage(
-          typeof item.image_url === "string"
-            ? item.image_url
-            : (item.image_url?.url ?? item.path),
+          typeof item.image_url === "string" ? item.image_url : (item.image_url?.url ?? item.path),
         );
       else if (typeof item.text === "string") visit(item.text);
       else if (item.content != null) visit(item.content);
