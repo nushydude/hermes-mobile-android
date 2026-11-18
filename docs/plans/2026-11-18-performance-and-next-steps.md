@@ -4,7 +4,11 @@ Written 18 November 2026 against branch `codex/fullscreen-handsfree` at `fa59f96
 
 This is a source review plus an implementation plan. Nothing here has been implemented, and nothing
 was measured on a phone. Every finding comes from reading the code; each one says what to measure
-before and after. Line numbers refer to the commit above and will drift.
+before and after.
+
+Line numbers refer to `fa59f96`. The Prettier reformat (`d8043b6`) moved every one of them, so in
+the current tree find the code by the function or symbol named next to each reference. To see the
+exact lines as cited, use `git show fa59f96:<path>`.
 
 ## How to use this document
 
