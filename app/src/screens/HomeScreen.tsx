@@ -779,8 +779,8 @@ export function HomeScreen({ onSetup }: { onSetup: () => void }) {
             />
           </View>
           <Text style={ui.muted}>
-            Timings are stored only in memory and contain elapsed stages, not conversation text.
-            Turning this off clears them.
+            Timings are stored only in memory and contain elapsed stages, durations, save sizes and
+            render counts, not conversation text. Turning this off clears them.
           </Text>
           {timingEnabled && (
             <Button
@@ -788,7 +788,7 @@ export function HomeScreen({ onSetup }: { onSetup: () => void }) {
               label="Copy response timings"
               onPress={() => {
                 void Clipboard.setStringAsync(
-                  JSON.stringify(conversationDiagnostics.export()),
+                  JSON.stringify(conversationDiagnostics.report()),
                 ).catch(() => Alert.alert("Could not copy timings"));
               }}
             />

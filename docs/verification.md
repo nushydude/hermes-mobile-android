@@ -33,6 +33,33 @@ Prebuild/autolinking must exist first. JVM results do not prove Android intent d
 lifetime. Historical 0.3.0 evidence combines a full baseline with affected-suite reruns: **294 host
 checks + 2 plugin checks + 5 JVM checks = 301 distinct checks**, not 301 physical phone tests.
 
+## Performance capture
+
+`npm run bench` prints host counts (cache writes, characters serialized, live-text work) for the
+state manager; see [the benchmark guide](../tools/bench/README.md). It needs no phone. Phone
+captures add frame times and the app's own timings. They need an owner-authorized Preview install.
+
+1. In Home settings, turn on **Collect response timings**. It is memory-only and off after every
+   app start, so the cold-start `cache_restore_ms` sample is not captured this way.
+2. Before each scenario, reset frame statistics:
+   `adb shell dumpsys gfxinfo net.taild39a23.hermesmobile reset`
+3. Run one scenario, then save
+   `adb shell dumpsys gfxinfo net.taild39a23.hermesmobile framestats` to a file under
+   `.artifacts/perf-capture/<date>-<build>/`:
+   - **Typing:** type 200 characters into the composer of a chat with at least 50 loaded rows.
+   - **Streaming:** ask for a reply of about 4,000 characters and keep the chat open until it
+     completes.
+   - **Opening:** from Home, open five different chats in sequence, returning to Home between them.
+4. After each scenario, tap **Copy response timings** and save the clipboard next to the frame
+   file. It holds trace stages, duration samples (`persist_ms` with payload size,
+   `session_open_ms`, `connect_ready_ms`, `cache_restore_ms`) and render counts for `ChatScreen`,
+   timeline items, the live message and the composer. Turn the switch off and on to clear it
+   between scenarios.
+
+Summarize timings with `node tools/smoke/timing-summary-cli.mjs` (see the
+[smoke guide](../tools/smoke/README.md)). Record the build, device and scenario with each capture.
+Frame statistics and timings never include message text; check before attaching any other log.
+
 ## Explicit live gateway checks
 
 These use the real gateway; read the [smoke guide](../tools/smoke/README.md) before running them.

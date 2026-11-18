@@ -271,6 +271,7 @@ export function VoiceSheet({
             preserveDraft: true,
             consumeAttachments: !!images,
             valid,
+            diagnosticTrace: trace,
           });
           if (!result) throw new Error();
           submission = result;

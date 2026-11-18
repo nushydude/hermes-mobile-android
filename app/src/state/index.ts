@@ -15,7 +15,7 @@ import { compactActivity, emptyChat, mergeSessions, reduceEvent, snapshotChat } 
 import { ImageReads } from "./imageReads";
 import { notifyEvent, reconcileSnapshot } from "../notifications";
 import { limitedText } from "./voiceHttp";
-import { conversationDiagnostics } from "./conversationDiagnostics";
+import { conversationDiagnostics, type DiagnosticTimer } from "./conversationDiagnostics";
 import { validAction } from "../notificationCore";
 import { buildVersion } from "../buildVersion";
 
@@ -53,7 +53,12 @@ function restorePosition<T extends { submission_id: string; enqueue_order: numbe
 const id = randomUUID;
 
 export class AppManager {
-  private diagnosticSubmissions = new Map<string, { trace: number; sessionId: string }>();
+  // Submission ID -> diagnostic trace. `owned` traces were begun by sendWork and end here on
+  // completion; others belong to the caller (voice), which marks and ends them itself.
+  private diagnosticSubmissions = new Map<
+    string,
+    { trace: number; sessionId: string; owned: boolean; admission?: string }
+  >();
   private state = initial();
   private listeners = new Set<() => void>();
   private voiceListeners = new Set<(event: GatewayEvent) => void>();
@@ -180,6 +185,7 @@ export class AppManager {
     this.listeners.forEach((fn) => fn());
   }
   private persist(): Promise<void> {
+    const timer = conversationDiagnostics.startTimer();
     const key = this.baseUrl ? cacheKey(this.baseUrl) : "state";
     const payload = {
       sessions: this.state.sessions,
@@ -224,6 +230,7 @@ export class AppManager {
           key,
           data,
         );
+        conversationDiagnostics.sample("persist_ms", timer, data.length);
         if (pending && pending.data === data && this.pendingCaches.get(key) === pending)
           this.pendingCaches.delete(key);
         this.clearCoveredWarning("full", revision, epoch);
@@ -340,6 +347,7 @@ export class AppManager {
     }
     this.credentials = credentials;
     this.baseUrl = credentials?.origin ?? "";
+    const restoreTimer = conversationDiagnostics.startTimer();
     let row = invalidConfig
       ? null
       : await this.db.getFirstAsync<{ value: string }>(
@@ -366,6 +374,7 @@ export class AppManager {
                 : {};
         }
         this.restoreCache(await this.withDraftCheckpoint(c, credentials?.origin ?? ""));
+        conversationDiagnostics.sample("cache_restore_ms", restoreTimer);
       } catch {
         this.update({ error: "Local cache could not be read." });
       }
@@ -838,12 +847,19 @@ export class AppManager {
   }
   private makeClient(credentials: Credentials) {
     let active = false;
+    let dialTimer: DiagnosticTimer | null = null;
     const client = new CanonicalClient({
       clientIdentity: { name: "hermes-mobile", version: buildVersion },
       baseUrl: credentials.origin,
       getToken: async () => credentials.token,
       onState: (connection) => {
         if (this.client !== client || !active) return;
+        if (connection === "connecting" || connection === "reconnecting")
+          dialTimer ??= conversationDiagnostics.startTimer();
+        else {
+          if (connection === "ready") conversationDiagnostics.sample("connect_ready_ms", dialTimer);
+          dialTimer = null;
+        }
         this.update({ connection });
         if (active && connection === "ready") {
           void this.refreshSessions().catch(() => {});
@@ -877,11 +893,25 @@ export class AppManager {
           const trace =
             typeof submission === "string" ? this.diagnosticSubmissions.get(submission) : undefined;
           if (trace !== undefined && trace.sessionId === event.session_id) {
-            conversationDiagnostics.mark(trace.trace, "reply_complete");
-            conversationDiagnostics.end(trace.trace);
+            if (trace.owned) {
+              conversationDiagnostics.mark(trace.trace, "reply_complete");
+              conversationDiagnostics.end(trace.trace);
+            }
             this.diagnosticSubmissions.delete(submission);
           }
         }
+        if (
+          event.type === "message.delta" &&
+          this.diagnosticSubmissions.size &&
+          conversationDiagnostics.isEnabled()
+        )
+          for (const trace of this.diagnosticSubmissions.values())
+            if (
+              trace.admission !== undefined &&
+              trace.admission === event.admission_id &&
+              trace.sessionId === event.session_id
+            )
+              conversationDiagnostics.mark(trace.trace, "first_delta");
         for (const listener of this.voiceListeners) {
           try {
             listener(event);
@@ -914,6 +944,11 @@ export class AppManager {
           throw new Error("Submission is no longer queued");
         await this.persist();
       },
+      onSubmitSent: (submission) => {
+        if (this.client !== client || !active) return;
+        const trace = this.diagnosticSubmissions.get(submission.submission_id);
+        if (trace) conversationDiagnostics.mark(trace.trace, "submit_sent");
+      },
       acknowledgeSubmission: async (submission, receipt) => {
         if (this.client !== client || !active) throw new Error("Gateway changed");
         const key = `outbox:${submission.submission_id}`,
@@ -921,6 +956,8 @@ export class AppManager {
           saved = this.state.outbox.find((x) => x.submission_id === submission.submission_id);
         const chat = this.state.chats[submission.session_id] ?? emptyChat();
         const admission = asObject(receipt).admission_id;
+        const trace = this.diagnosticSubmissions.get(submission.submission_id);
+        if (trace && typeof admission === "string") trace.admission = admission;
         this.update({
           chats: {
             ...this.state.chats,
@@ -1401,6 +1438,7 @@ export class AppManager {
     control?: { valid?: () => boolean; onActivated?: (revision: number) => void },
   ) => {
     if (control?.valid && !control.valid()) throw new Error("Navigation cancelled");
+    const openTimer = conversationDiagnostics.startTimer();
     this.flushEvents();
     const epoch = this.endpointEpoch;
     const revision = ++this.navigationRevision;
@@ -1434,6 +1472,7 @@ export class AppManager {
     if (this.client !== client) return;
     await this.resolveSessionAlias(sessionId, snapshot.session_id, client);
     void this.recoverReceipts(snapshot.session_id, client);
+    conversationDiagnostics.sample("session_open_ms", openTimer);
     return snapshot.session_id;
   };
   createSession = async (
@@ -1565,7 +1604,13 @@ export class AppManager {
     sessionId: string,
     text = this.state.drafts[sessionId] ?? "",
     attachments?: Array<{ path: string; mime: string }>,
-    options?: { preserveDraft?: boolean; consumeAttachments?: boolean; valid?: () => boolean },
+    options?: {
+      preserveDraft?: boolean;
+      consumeAttachments?: boolean;
+      valid?: () => boolean;
+      /** A caller-owned diagnostic trace (voice) to mark submit_sent and first_delta on. */
+      diagnosticTrace?: number | null;
+    },
   ) =>
     this.queueForEndpoint(() => {
       if (options?.valid && !options.valid()) throw new Error("Voice session ended");
@@ -1575,6 +1620,7 @@ export class AppManager {
         attachments,
         !!options?.preserveDraft,
         !!options?.consumeAttachments,
+        options?.diagnosticTrace ?? null,
       );
     });
   private sendWork = async (
@@ -1583,6 +1629,7 @@ export class AppManager {
     attachments?: Array<{ path: string; mime: string }>,
     preserveDraft = false,
     consumeAttachments = false,
+    diagnosticTrace: number | null = null,
   ) => {
     if (this.state.chats[sessionId]?.sessionUnavailable)
       throw new Error("This session is unavailable.");
@@ -1597,9 +1644,14 @@ export class AppManager {
       ...(attachments?.length ? { attachments } : {}),
     };
     const trace = preserveDraft ? null : conversationDiagnostics.begin();
-    if (trace !== null) {
-      conversationDiagnostics.mark(trace, "submission_start");
-      this.diagnosticSubmissions.set(submission.submission_id, { trace, sessionId });
+    if (trace !== null) conversationDiagnostics.mark(trace, "submission_start");
+    const tracked = trace ?? (conversationDiagnostics.isEnabled() ? diagnosticTrace : null);
+    if (tracked !== null) {
+      this.diagnosticSubmissions.set(submission.submission_id, {
+        trace: tracked,
+        sessionId,
+        owned: trace !== null,
+      });
       while (this.diagnosticSubmissions.size > 500)
         this.diagnosticSubmissions.delete(this.diagnosticSubmissions.keys().next().value!);
     }
