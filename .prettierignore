@@ -1,0 +1,14 @@
+# Prettier formats only the JS/TS scope named in the root "format" scripts.
+# These paths are excluded even if a pattern would match them.
+
+# Copied from Hermes; tools/sync-contract.mjs compares it byte-for-byte with upstream.
+packages/hermes-protocol/src/vendor/
+
+# Generated, installed or local-only trees.
+app/android/
+app/modules/hermes-sharing/android/
+node_modules/
+.artifacts/
+.toolchain/
+.codex/
+.local/

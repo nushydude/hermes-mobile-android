@@ -24,10 +24,13 @@
     "setup:qr": "pwsh -NoProfile -File tools/show-setup-qr.ps1",
     "test:preferences": "vitest run --config app/vitest.preferences.config.ts",
     "probe:rename": "vitest run --config tools/smoke/vitest.rename-live.config.ts",
-    "probe:recovery": "vitest run --config tools/smoke/vitest.recovery-live.config.ts"
+    "probe:recovery": "vitest run --config tools/smoke/vitest.recovery-live.config.ts",
+    "format": "prettier --write \"app/{App.tsx,index.ts,polyfills.ts,metro.config.js}\" \"{app/src,app/plugins,app/modules/hermes-sharing,packages/hermes-protocol/src,packages/hermes-protocol/test}/**/*.{ts,tsx,js,cjs,mjs}\"",
+    "format:check": "prettier --check \"app/{App.tsx,index.ts,polyfills.ts,metro.config.js}\" \"{app/src,app/plugins,app/modules/hermes-sharing,packages/hermes-protocol/src,packages/hermes-protocol/test}/**/*.{ts,tsx,js,cjs,mjs}\""
   },
   "devDependencies": {
     "@types/node": "26.6.6",
+    "prettier": "3.9.10",
     "qrcode-terminal": "^0.12.0",
     "typescript": "~6.0.3",
     "vitest": "5.1.0"
