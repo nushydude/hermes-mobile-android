@@ -1,12 +1,12 @@
 # Documentation map
 
-Updated 18 November 2026 (Australia/Sydney). Last recorded installation: **0.3.2 (9)**.
+Updated 18 November 2026 (Australia/Sydney). Last recorded installation: **0.3.3 (10)**.
 
-Installed owner-test preview: [0.3.2 (9)](releases/0.3.2.md); behavior acceptance remains open. [Conversational execution and gates](plans/conversational-experience-execution.md).
+Installed owner-test preview: [0.3.3 (10)](releases/0.3.3.md); behavior acceptance remains open. [Conversational execution and gates](plans/conversational-experience-execution.md).
 
 ## Read first
 
-Current approved implementation: [full-screen hands-free redesign](plans/2026-11-18-fullscreen-handsfree.md), with [shared design references](designs/handsfree-v2/DESIGN.md). Source implementation/review is in progress; owner approval is required before APK packaging.
+Current approved implementation: [full-screen hands-free redesign](plans/2026-11-18-fullscreen-handsfree.md), with [shared design references](designs/handsfree-v2/DESIGN.md). Implementation, independent review, approved packaging and in-place installation are complete; native behavior acceptance remains open.
 
 1. [Project overview](../README.md): capabilities and entry points.
 2. [Current status](STATUS.md): shipped work, evidence and acceptance gaps.

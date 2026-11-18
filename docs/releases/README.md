@@ -1,11 +1,12 @@
 # Release records
 
-Owner-test preview: [0.3.2 (9)](0.3.2.md), installed; behavior acceptance remains open.
+Owner-test preview: [0.3.3 (10)](0.3.3.md), installed; behavior acceptance remains open.
 
-Last recorded installed release: [0.3.2 (9)](0.3.2.md), 18 November 2026.
+Last recorded installed release: [0.3.3 (10)](0.3.3.md), 18 November 2026.
 
 | Version | Android code | Main change | Recorded installation |
 | --- | --- | --- | --- |
+| [0.3.3](0.3.3.md) | 10 | Full-screen multimodal hands-free preview | Success |
 | [0.3.2](0.3.2.md) | 9 | Conversational controls and observed tasks preview | Success |
 | [0.3.1](0.3.1.md) | 8 | Audit repairs and narrow simplification | Success |
 | 0.3.0 | 7 | Everyday chat tools, Android sharing, filters and model controls | Success |

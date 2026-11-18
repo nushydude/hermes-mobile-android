@@ -4,13 +4,13 @@ Recorded 18 November 2026. This is a documentation snapshot, not a live service-
 
 ## New preview candidate
 
-[0.3.2 (9)](releases/0.3.2.md) was installed as an in-place update on 18 November 2026; phone behavior remains untested. Reviewed conversational controls, timing diagnostics and observed-task visibility are implemented. Main's 386 offline checks, types, contract drift, native build and APK integrity checks pass. Device, real-child and performance acceptance remain open; native duplex voice is deferred behind continuity and included-credit hard-stop gates. No Hermes/Home Dashboard configuration or account/plan changes were made. See the [execution record](plans/conversational-experience-execution.md) and [owner checklist](plans/conversational-phase5-acceptance.md).
+[0.3.3 (10)](releases/0.3.3.md) was installed as an in-place update on 18 November 2026; phone behavior remains untested. Full-screen multimodal hands-free, protected exit, direct new-conversation entry and secondary readback/timing settings are implemented. Main's 412 offline checks, types, contract drift, native build and APK integrity checks pass; independent Sol 6.1 / Extra High review cleared the repaired source. Device, real-child and performance acceptance remain open; native duplex voice remains deferred. No Hermes/Home Dashboard configuration or account/plan changes were made. See the [execution evidence](plans/2026-11-18-fullscreen-handsfree.md) and [short owner checklist](releases/0.3.3.md#short-owner-checklist).
 
 ## Release
 
-Last recorded successful installation: **[0.3.2 (9)](releases/0.3.2.md)** on the owner's Pixel.
+Last recorded successful installation: **[0.3.3 (10)](releases/0.3.3.md)** on the owner's Pixel.
 `adb install -r` returned Success and package metadata confirmed version/code. Previous installed
-build: 0.3.1 (8). No app launch or phone behavior tests were performed during this installation.
+build: 0.3.2 (9). No app launch or phone behavior tests were performed during this installation.
 
 The retained 0.3.1 baseline includes all eight
 [source-audit repairs](audits/2026-11-17-remediation.md), narrow duplication removal and independent
@@ -26,7 +26,7 @@ remains owner acceptance.
 | Search | Loaded-session search and Find in loaded visible messages | Stored inventory cap is 200 without pagination; not full-history search. |
 | Recovery | Origin-scoped cache, durable IDs, replay, aliases and unknown delivery | Fake-server and selected real gateway probes pass; physical network-loss matrix remains. |
 | Models | Mobile provider policy, local favourites and Hermes reasoning picker | Policy mutation/reset tested; clamping displayed, not advertised as native per-model support. |
-| Voice | Foreground Review first/Hands-free, calibrated meter, transcript and final-reply playback | Gateway audio smoke passed. Owner reported hands-free endpoint failure; 0.2.4 repair installed but microphone behaviour is not yet accepted. |
+| Voice | One-tap full-screen hands-free, calibrated activity feedback, image/camera and new-conversation controls, exact final-reply playback | Offline checks and independent source review pass; current microphone, layout and interruption behavior require owner phone acceptance. |
 | Notifications | Local previews/actions/monitor plus PC-to-ntfy | Owner confirmed receipt and improved alerts; closed-app/request-resolution/watch coverage incomplete. |
 | Sharing | Explicit recipient, review, private inbox and durable image drafts | Native compile, JVM and host checks pass; cold/warm intent and URI grants require phone checks. |
 
