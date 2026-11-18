@@ -10,7 +10,9 @@ Back up configuration before changes; preserve existing Serve mappings and servi
 
 ## Provision the phone
 
-In PowerShell, set your actual HTTPS origin before using the tools:
+**First open Tailscale on the phone and confirm it is connected.** Check this again after a phone restart. Keep the PC awake and connected to Tailscale too. Hermes Mobile cannot reach the tailnet gateway while the phone's Tailscale connection is off.
+
+On this Windows installation, `npm run setup:qr` can read the existing Hermes `webapp.public_url` using its installed Python environment. It opens a private desktop window, with no credential in the command output. `pwsh -NoProfile -File tools/show-setup-qr.ps1 -CheckOnly` checks configuration without displaying a QR. An explicitly supplied HTTPS origin takes precedence; for another installation set it in PowerShell:
 
 ```powershell
 $env:HERMES_MOBILE_GATEWAY_URL = 'https://desktop.example-tailnet.ts.net:9120' # replace this
@@ -27,4 +29,8 @@ Replace the dashboard token with a fresh cryptographically random value in the g
 
 Build and install guidance is in [development](docs/development.md), including the debug signing limitation. An APK built with a different signing key cannot update an existing installation in place. Avoid clearing app data to force an update: drafts and provisioning can be lost. For notifications, including optional ntfy configuration and limits, see [NOTIFICATIONS.md](NOTIFICATIONS.md).
 
-If connection fails, check the PC, gateway, HTTPS endpoint and tailnet first. A persistent connection error is shown after the startup grace period. Preserve uncertain outbox entries rather than submitting a duplicate. Voice waits for a completed reply; a waiting timer does not predict model completion time.
+If connection fails, first open **Tailscale on the phone** and confirm **Connected**. Then check Tailscale on the PC, that the PC is awake, and the gateway/HTTPS endpoint. Do this before re-pairing or clearing anything. The setup form starts blank even when credentials are stored, so blank fields do not establish settings loss. A persistent connection error is shown after the startup grace period. Preserve uncertain outbox entries rather than submitting a duplicate. Voice waits for a completed reply; a waiting timer does not predict model completion time.
+
+## Ask Hermes Desktop for pairing
+
+The local `hermes-mobile-pairing` skill lets the owner ask **“Show my Hermes Mobile pairing QR.”** Its source is [SKILL.md](tools/hermes-skills/hermes-mobile-pairing/SKILL.md); the installed copy belongs in the default Hermes home's `skills/hermes-mobile-pairing/` directory. A new desktop conversation can discover it without changing gateway/profile settings or restarting the gateway. The QR appears only in a local window and clears after two minutes. It is never a chat attachment.
