@@ -4,7 +4,16 @@ A native Android client for the Hermes Agent gateway. It connects over HTTPS/WSS
 
 ![Warm Forest Home and Chat design](docs/designs/warm-forest-v1/home-chat.png)
 
-The image is a design reference, not a promise of exact device appearance.
+Hands-free voice: entering from the composer, listening, speaking and reviewing an attachment.
+
+<p>
+  <img src="docs/designs/handsfree-v2/chat.png" alt="Composer with voice entry" width="190">
+  <img src="docs/designs/handsfree-v2/listening.png" alt="Hands-free listening" width="190">
+  <img src="docs/designs/handsfree-v2/speaking.png" alt="Hands-free speaking" width="190">
+  <img src="docs/designs/handsfree-v2/attachment.png" alt="Paused attachment review" width="190">
+</p>
+
+These images are design references, not Android runtime screenshots or a promise of exact device appearance.
 
 ## Features
 
